@@ -1509,6 +1509,14 @@ impl VulkanDevice {
             vertices.extend_from_slice(p);
             vertices.extend_from_slice(c);
         }
+        let batches = [Batch3d {
+            first_index: 0,
+            index_count: indices.len() as u32,
+            depth_write: true,
+            blend: false,
+            alpha_pass: 0.0,
+            texture: None,
+        }];
         self.render_3d_pass(
             width,
             height,
@@ -1523,19 +1531,34 @@ impl VulkanDevice {
                 indices,
                 uniforms: bytemuck_cast_f32(&vp),
                 storage: None,
+                sampled: false,
+                push_constants: false,
+                batches: &batches,
             },
             background,
         )
     }
 
-    /// Render the **lit 3D forward pass** — `vieww-3d`'s `GpuRenderer`'s second
-    /// increment — and read it back as straight-alpha RGBA8.
+    /// Render the **lit 3D forward pass** — `vieww-3d`'s `GpuRenderer`'s
+    /// second increment, textures and transparency included — and read the
+    /// result back as straight-alpha RGBA8.
     ///
     /// `vertices` is a de-indexed triangle list (three per triangle, in
-    /// order), each vertex sixteen floats: world position, world normal,
+    /// order), each vertex twenty floats: world position, world normal,
     /// linear albedo, linear emissive, each `xyz` then one float — the first
     /// of those four is 1 for Lambert and 0 for Basic, the second 1 if the
-    /// material receives shadows, the last two unused.
+    /// material receives shadows, the last two Phong's `shininess` and
+    /// `specular` — then the material's texture coordinates `uv`, its
+    /// `opacity`, and 1 if a texture is bound for its batch (the
+    /// transparent-split inputs; see `lit3d.wgsl`).
+    ///
+    /// `batches` draws the geometry in order, each batch through its own
+    /// texture (the CPU oracle's linear-light texels, uploaded as f16), its
+    /// own sampler (nearest or bilinear), its own depth-write and blend
+    /// state, and its own half of the transparent split (`alpha_pass`) —
+    /// `vieww-3d/src/gpu.rs` builds them from the CPU renderer's own
+    /// opaque/transparent pass order.
+    ///
     /// `uniforms` is the shader's `Uniforms` block, std140, as
     /// [`vieww_shaders::library::LIT3D_WGSL`] documents it; `shadow_depth` the
     /// shadow map's depths (empty when there is none). `background` is
@@ -1545,13 +1568,18 @@ impl VulkanDevice {
     /// # Errors
     ///
     /// Any Vulkan call failing.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the pass's own contract: geometry, uniforms, shadow map, batches and background"
+    )]
     pub fn render_lit3d_to_pixels(
         &self,
         width: u32,
         height: u32,
-        vertices: &[[f32; 16]],
+        vertices: &[[f32; 20]],
         uniforms: &[f32],
         shadow_depth: &[f32],
+        batches: &[Batch3d<'_>],
         background: [f32; 3],
     ) -> Result<Vec<u8>, VulkanError> {
         let flat: &[f32] = vertices.as_flattened();
@@ -1562,31 +1590,38 @@ impl VulkanDevice {
             &Pass3d {
                 wgsl: vieww_shaders::library::LIT3D_WGSL,
                 vertices: bytemuck_cast_f32(flat),
-                stride: 64,
+                stride: 80,
                 attributes: &[
                     (0, vk::Format::R32G32B32_SFLOAT, 0),
                     (1, vk::Format::R32G32B32_SFLOAT, 16),
                     (2, vk::Format::R32G32B32_SFLOAT, 32),
                     (3, vk::Format::R32G32B32_SFLOAT, 48),
-                    // The flags ride in the first two pads.
                     (4, vk::Format::R32_SFLOAT, 12),
                     (5, vk::Format::R32_SFLOAT, 28),
+                    (6, vk::Format::R32_SFLOAT, 44),
+                    (7, vk::Format::R32_SFLOAT, 60),
+                    (8, vk::Format::R32G32_SFLOAT, 64),
+                    (9, vk::Format::R32_SFLOAT, 72),
+                    (10, vk::Format::R32_SFLOAT, 76),
                 ],
                 indices: &indices,
                 uniforms: bytemuck_cast_f32(uniforms),
                 storage: Some(bytemuck_cast_f32(shadow_depth)),
+                sampled: true,
+                push_constants: true,
+                batches,
             },
             background,
         )
     }
 
-    /// The one-shot depth-tested 3D pass both [`Self::render_unlit3d_to_pixels`]
-    /// and [`Self::render_lit3d_to_pixels`] draw through: an interleaved vertex
-    /// buffer described by `pass.attributes`, an index list, one uniform
-    /// buffer (binding 0, both stages) and an optional fragment-stage storage
-    /// buffer (binding 1), into a cleared colour + depth target that is read
-    /// back as RGBA8. Extracted from the unlit pass unchanged in everything
-    /// but the buffer plumbing, so the two passes cannot drift apart.
+    /// The one-shot depth-tested 3D pass every 3D entry point draws through:
+    /// an interleaved vertex buffer described by `pass.attributes`, one
+    /// index list drawn as `pass.batches` says — each batch its own texture,
+    /// sampler, depth-write and blend state — into a cleared linear RGBA16F
+    /// colour + depth target, read back and sRGB-encoded on the CPU exactly
+    /// as `vieww-3d`'s `to_image` does. Extracted from the unlit pass so the
+    /// 3D entry points cannot drift apart.
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss,
@@ -1601,10 +1636,8 @@ impl VulkanDevice {
     ) -> Result<Vec<u8>, VulkanError> {
         let indices = pass.indices;
         let vertex_count = pass.vertices.len() / pass.stride as usize;
-        // The CPU oracle's background: sRGB-encode the linear clear colour
-        // (the fragment shader does the same for covered pixels), then the
-        // UNORM clear rounds it to the byte `to_image` produces. Written here
-        // so both the early-out below and the clear value agree on it.
+        // The CPU oracle's background, encoded the way its `to_image`
+        // encodes every pixel — including the shaded ones, at the readback.
         #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
         fn srgb(v: f32) -> f32 {
             let v = v.clamp(0.0, 1.0);
@@ -1621,7 +1654,8 @@ impl VulkanDevice {
         ];
         let bg_byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
 
-        if vertex_count == 0 || indices.is_empty() {
+        let total_indices: u64 = pass.batches.iter().map(|b| u64::from(b.index_count)).sum();
+        if vertex_count == 0 || indices.is_empty() || total_indices == 0 {
             // Nothing to draw: the frame is the encoded background, exactly
             // what the CPU renderer returns for an empty scene.
             let bg_px = [bg_byte(bg[0]), bg_byte(bg[1]), bg_byte(bg[2]), 255];
@@ -1639,7 +1673,14 @@ impl VulkanDevice {
         );
 
         let device = &self.device;
-        let format = vk::Format::R8G8B8A8_UNORM;
+        // Linear RGBA16F: the CPU oracle lerps linear colours and encodes
+        // once at `to_image`, so the target the GPU blends into holds linear
+        // values too, and the readback encodes them the same way. (The
+        // target was UNORM RGBA8 with the encode in the fragment shader
+        // until transparency arrived: blending encoded bytes is not the
+        // CPU's arithmetic, so a translucent surface's colour would have
+        // been blended in the wrong space.)
+        let format = vk::Format::R16G16B16A16_SFLOAT;
 
         // --- colour attachment image (as in render_mesh_to_pixels) -----------
         let image_info = vk::ImageCreateInfo::default()
@@ -1808,7 +1849,173 @@ impl VulkanDevice {
         let ssbo_size = storage_bytes.len() as u64;
         let with_storage = pass.storage.is_some();
 
-        // --- descriptor set -----------------------------------------------------
+        // --- textures and samplers ---------------------------------------------
+        // One sampled image per distinct texture, plus a 1x1 transparent
+        // dummy so every set binds *something* at bindings 2 and 3 (the
+        // shader statically reads them; a set with a hole is invalid).
+        // Uploaded as RGBA16F from the oracle's own linear texels, via a
+        // staging buffer copied on this pass's command buffer.
+        #[derive(Clone, Copy)]
+        struct Uploaded {
+            image: vk::Image,
+            memory: vk::DeviceMemory,
+            view: vk::ImageView,
+        }
+        // Every upload, in the order it happens: the image, the staging
+        // buffer, the copy region — the command buffer records these
+        // directly, so the image-to-staging pairing can never drift.
+        let mut upload_jobs: Vec<(vk::Image, vk::Buffer, vk::BufferImageCopy)> = Vec::new();
+        // The staging buffers to free afterwards.
+        let mut staging_uploads: Vec<(vk::Buffer, vk::DeviceMemory)> = Vec::new();
+        // The textures themselves, for the teardown.
+        let mut uploaded_textures: Vec<Uploaded> = Vec::new();
+        let mut samplers: Vec<(bool, vk::Sampler)> = Vec::new();
+        let sampler_for = |nearest: bool,
+                           samplers: &mut Vec<(bool, vk::Sampler)>|
+         -> Result<vk::Sampler, VulkanError> {
+            if let Some((_, existing)) = samplers.iter().find(|(n, _)| *n == nearest) {
+                return Ok(*existing);
+            }
+            let filter = if nearest {
+                vk::Filter::NEAREST
+            } else {
+                vk::Filter::LINEAR
+            };
+            let info = vk::SamplerCreateInfo::default()
+                .mag_filter(filter)
+                .min_filter(filter)
+                .address_mode_u(vk::SamplerAddressMode::REPEAT)
+                .address_mode_v(vk::SamplerAddressMode::REPEAT)
+                .address_mode_w(vk::SamplerAddressMode::REPEAT)
+                .max_lod(0.0);
+            let sampler = unsafe { device.create_sampler(&info, None) }?;
+            samplers.push((nearest, sampler));
+            Ok(sampler)
+        };
+        let mut upload_texture = |texels: &[[f32; 4]],
+                                  tex_width: u32,
+                                  tex_height: u32,
+                                  nearest: bool,
+                                  samplers: &mut Vec<(bool, vk::Sampler)>|
+         -> Result<(Uploaded, vk::Sampler), VulkanError> {
+            let info = vk::ImageCreateInfo::default()
+                .image_type(vk::ImageType::TYPE_2D)
+                .format(vk::Format::R16G16B16A16_SFLOAT)
+                .extent(vk::Extent3D {
+                    width: tex_width,
+                    height: tex_height,
+                    depth: 1,
+                })
+                .mip_levels(1)
+                .array_layers(1)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .tiling(vk::ImageTiling::OPTIMAL)
+                .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                .initial_layout(vk::ImageLayout::UNDEFINED);
+            let image = unsafe { device.create_image(&info, None) }?;
+            let req = unsafe { device.get_image_memory_requirements(image) };
+            let memory_type =
+                self.find_memory_type(req.memory_type_bits, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
+            let alloc = vk::MemoryAllocateInfo::default()
+                .allocation_size(req.size)
+                .memory_type_index(memory_type);
+            let memory = unsafe { device.allocate_memory(&alloc, None) }?;
+            unsafe { device.bind_image_memory(image, memory, 0) }?;
+            let view_info = vk::ImageViewCreateInfo::default()
+                .image(image)
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(vk::Format::R16G16B16A16_SFLOAT)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+            let view = unsafe { device.create_image_view(&view_info, None) }?;
+            // The staging bytes: the oracle's f32 texels as f16 — the same
+            // numbers to both renderers' sampling, within half precision.
+            let mut half = Vec::with_capacity(texels.len() * 8);
+            for texel in texels {
+                for value in texel {
+                    half.extend_from_slice(&crate::scene_exec::f32_to_half(*value).to_le_bytes());
+                }
+            }
+            let (staging, staging_memory) =
+                self.create_host_visible_buffer(vk::BufferUsageFlags::TRANSFER_SRC, &half)?;
+            let copy = vk::BufferImageCopy {
+                buffer_offset: 0,
+                buffer_row_length: 0,
+                buffer_image_height: 0,
+                image_subresource: vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: 0,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                },
+                image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
+                image_extent: vk::Extent3D {
+                    width: tex_width,
+                    height: tex_height,
+                    depth: 1,
+                },
+            };
+            upload_jobs.push((image, staging, copy));
+            staging_uploads.push((staging, staging_memory));
+            let sampler = sampler_for(nearest, samplers)?;
+            let uploaded = Uploaded {
+                image,
+                memory,
+                view,
+            };
+            uploaded_textures.push(Uploaded {
+                image,
+                memory,
+                view,
+            });
+            Ok((uploaded, sampler))
+        };
+        // The dummy: 1x1 transparent, its own sampler, first in the upload
+        // order.
+        let (dummy, dummy_sampler) = if pass.sampled {
+            let (dummy, sampler) = upload_texture(&[[0.0; 4]], 1, 1, false, &mut samplers)?;
+            (Some(dummy), Some(sampler))
+        } else {
+            (None, None)
+        };
+        // One image + sampler per distinct texture, shared by the batches
+        // that use it — a texture is identified by its texels' address,
+        // which is how `vieww-3d` shares the `Arc`d texels behind it.
+        let mut batch_textures: Vec<Option<(Uploaded, vk::Sampler)>> = Vec::new();
+        let mut texel_ptrs: Vec<*const [f32; 4]> = Vec::new();
+        for batch in pass.batches {
+            let uploaded = match &batch.texture {
+                Some(texture) => {
+                    if let Some(slot) = texel_ptrs
+                        .iter()
+                        .position(|p| std::ptr::eq(*p, texture.texels.as_ptr()))
+                    {
+                        batch_textures[slot]
+                    } else {
+                        texel_ptrs.push(texture.texels.as_ptr());
+                        let (uploaded, sampler) = upload_texture(
+                            texture.texels,
+                            texture.width,
+                            texture.height,
+                            texture.nearest,
+                            &mut samplers,
+                        )?;
+                        Some((uploaded, sampler))
+                    }
+                }
+                None => None,
+            };
+            batch_textures.push(uploaded);
+        }
+
+        // --- descriptor sets: one per batch --------------------------------------
+        let set_count = pass.batches.len().max(1) as u32;
         let mut bindings = vec![vk::DescriptorSetLayoutBinding::default()
             .binding(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
@@ -1823,57 +2030,140 @@ impl VulkanDevice {
                     .stage_flags(vk::ShaderStageFlags::FRAGMENT),
             );
         }
+        if pass.sampled {
+            bindings.push(
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(2)
+                    .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            );
+            bindings.push(
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(3)
+                    .descriptor_type(vk::DescriptorType::SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            );
+        }
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
         let set_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None) }?;
 
-        let pool_sizes = [
+        let mut pool_sizes = vec![
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
-                descriptor_count: 1,
+                descriptor_count: set_count,
             },
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: 1,
+                descriptor_count: set_count,
             },
         ];
+        if pass.sampled {
+            pool_sizes.push(vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::SAMPLED_IMAGE,
+                descriptor_count: set_count,
+            });
+            pool_sizes.push(vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::SAMPLER,
+                descriptor_count: set_count,
+            });
+        }
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets(1);
+            .max_sets(set_count);
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }?;
+        // The pipeline layout takes the one set layout; the allocation takes
+        // it once *per set*: Vulkan allocates exactly as many sets as
+        // `set_layouts` has entries, so a one-element array here would
+        // allocate one set, and the per-batch binds below would index past
+        // it on the first multi-batch pass (any texture or translucency).
         let set_layouts = [set_layout];
+        let set_alloc_layouts = vec![set_layout; set_count as usize];
         let set_alloc = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(descriptor_pool)
-            .set_layouts(&set_layouts);
-        let descriptor_set = unsafe { device.allocate_descriptor_sets(&set_alloc) }?[0];
+            .set_layouts(&set_alloc_layouts);
+        let descriptor_sets = unsafe { device.allocate_descriptor_sets(&set_alloc)? };
+        debug_assert_eq!(descriptor_sets.len(), pass.batches.len().max(1));
 
-        let buffer_info = vk::DescriptorBufferInfo {
+        let buffer_infos = [vk::DescriptorBufferInfo {
             buffer: ubo,
             offset: 0,
             range: ubo_size,
-        };
-        let buffer_infos = [buffer_info];
+        }];
         let storage_infos = [vk::DescriptorBufferInfo {
             buffer: ssbo,
             offset: 0,
             range: ssbo_size,
         }];
-        let mut writes = vec![vk::WriteDescriptorSet::default()
-            .dst_set(descriptor_set)
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-            .buffer_info(&buffer_infos)];
-        if with_storage {
+        // The per-batch image/sampler infos live in their own vectors so
+        // every write can borrow from them and all of it outlives the one
+        // `update_descriptor_sets` call that reads it — collected first, so
+        // the write-building pass only borrows.
+        let mut batch_image_infos: Vec<[vk::DescriptorImageInfo; 1]> = Vec::new();
+        let mut batch_sampler_infos: Vec<[vk::DescriptorImageInfo; 1]> = Vec::new();
+        if pass.sampled {
+            for (index, _) in descriptor_sets.iter().enumerate() {
+                let (view, sampler) = match &batch_textures[index] {
+                    Some((uploaded, sampler)) => (uploaded.view, *sampler),
+                    None => (
+                        dummy
+                            .as_ref()
+                            .expect("a sampled pass has a dummy texture")
+                            .view,
+                        dummy_sampler.expect("a sampled pass has a dummy sampler"),
+                    ),
+                };
+                batch_image_infos.push([vk::DescriptorImageInfo {
+                    sampler: vk::Sampler::null(),
+                    image_view: view,
+                    image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                }]);
+                batch_sampler_infos.push([vk::DescriptorImageInfo {
+                    sampler,
+                    image_view: vk::ImageView::null(),
+                    image_layout: vk::ImageLayout::UNDEFINED,
+                }]);
+            }
+        }
+        let mut writes: Vec<vk::WriteDescriptorSet> = Vec::new();
+        for (index, set) in descriptor_sets.iter().enumerate() {
             writes.push(
                 vk::WriteDescriptorSet::default()
-                    .dst_set(descriptor_set)
-                    .dst_binding(1)
-                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                    .buffer_info(&storage_infos),
+                    .dst_set(*set)
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .buffer_info(&buffer_infos),
             );
+            if with_storage {
+                writes.push(
+                    vk::WriteDescriptorSet::default()
+                        .dst_set(*set)
+                        .dst_binding(1)
+                        .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                        .buffer_info(&storage_infos),
+                );
+            }
+            if pass.sampled {
+                writes.push(
+                    vk::WriteDescriptorSet::default()
+                        .dst_set(*set)
+                        .dst_binding(2)
+                        .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+                        .image_info(&batch_image_infos[index]),
+                );
+                writes.push(
+                    vk::WriteDescriptorSet::default()
+                        .dst_set(*set)
+                        .dst_binding(3)
+                        .descriptor_type(vk::DescriptorType::SAMPLER)
+                        .image_info(&batch_sampler_infos[index]),
+                );
+            }
         }
         unsafe { device.update_descriptor_sets(&writes, &[]) };
 
-        // --- shaders + pipeline --------------------------------------------------
+        // --- shaders + the pipeline variants -------------------------------------
         let vs_spirv = translate_wgsl_to_spirv(pass.wgsl, "vs_main", Stage::Vertex)?;
         let fs_spirv = translate_wgsl_to_spirv(pass.wgsl, "fs_main", Stage::Fragment)?;
         let vs_module = unsafe {
@@ -1946,45 +2236,81 @@ impl VulkanDevice {
             .line_width(1.0);
         let multisample = vk::PipelineMultisampleStateCreateInfo::default()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
-        // The depth state is the point of the 3D path: LESS keeps the nearest
-        // surface, the same contest the CPU's per-sample depth test runs.
-        let depth_stencil = vk::PipelineDepthStencilStateCreateInfo::default()
-            .depth_test_enable(true)
-            .depth_write_enable(true)
-            .depth_compare_op(vk::CompareOp::LESS);
-        // No blending: the unlit pass is opaque-only, straight colour in.
-        let blend_attachment = vk::PipelineColorBlendAttachmentState::default()
-            .blend_enable(false)
-            .color_write_mask(vk::ColorComponentFlags::RGBA);
-        let blend_attachments = [blend_attachment];
-        let color_blend =
-            vk::PipelineColorBlendStateCreateInfo::default().attachments(&blend_attachments);
 
-        let pipeline_layout_info =
-            vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
+        // The transparent split's state pairs: depth writes for the
+        // `a >= 1.0` half, straight-alpha-over blending in linear light for
+        // the `a < 1.0` one — the CPU oracle's write-or-lerp, expressed as
+        // pipeline state. One variant per distinct pair the batches use.
+        let mut variants: Vec<((bool, bool), vk::Pipeline)> = Vec::new();
+        let mut push_ranges = Vec::new();
+        if pass.push_constants {
+            push_ranges.push(
+                vk::PushConstantRange::default()
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                    .offset(0)
+                    .size(4),
+            );
+        }
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
+            .set_layouts(&set_layouts)
+            .push_constant_ranges(&push_ranges);
         let pipeline_layout =
             unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }?;
-
-        let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
-            .stages(&stages)
-            .vertex_input_state(&vertex_input)
-            .input_assembly_state(&input_assembly)
-            .viewport_state(&viewport_state)
-            .rasterization_state(&raster)
-            .multisample_state(&multisample)
-            .depth_stencil_state(&depth_stencil)
-            .color_blend_state(&color_blend)
-            .layout(pipeline_layout)
-            .render_pass(render_pass)
-            .subpass(0);
-        let pipelines = unsafe {
-            device.create_graphics_pipelines(self.pipeline_cache(), &[pipeline_info], None)
+        for batch in pass.batches {
+            let key = (batch.depth_write, batch.blend);
+            if variants.iter().any(|(k, _)| *k == key) {
+                continue;
+            }
+            // The depth state is the point of the 3D path: LESS keeps the
+            // nearest surface, the same contest the CPU's per-sample depth
+            // test runs; the write is the variant's half of the split.
+            let depth_stencil = vk::PipelineDepthStencilStateCreateInfo::default()
+                .depth_test_enable(true)
+                .depth_write_enable(batch.depth_write)
+                .depth_compare_op(vk::CompareOp::LESS);
+            // Straight-alpha source-over on a linear target: the CPU's
+            // `lerp(color, a)` — `rgb = src.rgb * a + dst.rgb * (1 - a)`,
+            // `alpha = a + dst.a * (1 - a)`.
+            let blend_attachment = if batch.blend {
+                vk::PipelineColorBlendAttachmentState::default()
+                    .blend_enable(true)
+                    .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+                    .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                    .color_blend_op(vk::BlendOp::ADD)
+                    .src_alpha_blend_factor(vk::BlendFactor::ONE)
+                    .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                    .alpha_blend_op(vk::BlendOp::ADD)
+                    .color_write_mask(vk::ColorComponentFlags::RGBA)
+            } else {
+                vk::PipelineColorBlendAttachmentState::default()
+                    .blend_enable(false)
+                    .color_write_mask(vk::ColorComponentFlags::RGBA)
+            };
+            let blend_attachments = [blend_attachment];
+            let color_blend =
+                vk::PipelineColorBlendStateCreateInfo::default().attachments(&blend_attachments);
+            let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
+                .stages(&stages)
+                .vertex_input_state(&vertex_input)
+                .input_assembly_state(&input_assembly)
+                .viewport_state(&viewport_state)
+                .rasterization_state(&raster)
+                .multisample_state(&multisample)
+                .depth_stencil_state(&depth_stencil)
+                .color_blend_state(&color_blend)
+                .layout(pipeline_layout)
+                .render_pass(render_pass)
+                .subpass(0);
+            let pipelines = unsafe {
+                device.create_graphics_pipelines(self.pipeline_cache(), &[pipeline_info], None)
+            }
+            .map_err(|(_, e)| VulkanError::Vulkan(e.to_string()))?;
+            variants.push((key, pipelines[0]));
         }
-        .map_err(|(_, e)| VulkanError::Vulkan(e.to_string()))?;
-        let pipeline = pipelines[0];
 
         // --- readback buffer ------------------------------------------------------
-        let readback_size = (width as u64) * (height as u64) * 4;
+        // f16 in, four bytes out — the readback holds the raw linear target.
+        let readback_size = (width as u64) * (height as u64) * 8;
         let readback_info = vk::BufferCreateInfo::default()
             .size(readback_size)
             .usage(vk::BufferUsageFlags::TRANSFER_DST)
@@ -2012,12 +2338,68 @@ impl VulkanDevice {
 
         let begin_info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-        unsafe { device.begin_command_buffer(command_buffer, &begin_info) }?;
+        unsafe { device.begin_command_buffer(command_buffer, &begin_info)? };
+
+        // The texture uploads, before the render pass: every staged f16
+        // buffer into its image, UNDEFINED -> TRANSFER_DST -> SHADER_READ.
+        for (image, staging, copy) in &upload_jobs {
+            unsafe {
+                device.cmd_pipeline_barrier(
+                    command_buffer,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[vk::ImageMemoryBarrier::default()
+                        .old_layout(vk::ImageLayout::UNDEFINED)
+                        .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .image(*image)
+                        .subresource_range(vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                            base_mip_level: 0,
+                            level_count: 1,
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        })],
+                );
+                device.cmd_copy_buffer_to_image(
+                    command_buffer,
+                    *staging,
+                    *image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    std::slice::from_ref(copy),
+                );
+                device.cmd_pipeline_barrier(
+                    command_buffer,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[vk::ImageMemoryBarrier::default()
+                        .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                        .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .image(*image)
+                        .subresource_range(vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                            base_mip_level: 0,
+                            level_count: 1,
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        })],
+                );
+            }
+        }
 
         let clear_values = [
             vk::ClearValue {
                 color: vk::ClearColorValue {
-                    float32: [bg[0], bg[1], bg[2], 1.0],
+                    float32: [background[0], background[1], background[2], 1.0],
                 },
             },
             vk::ClearValue {
@@ -2037,18 +2419,55 @@ impl VulkanDevice {
             .clear_values(&clear_values);
         unsafe {
             device.cmd_begin_render_pass(command_buffer, &rp_begin, vk::SubpassContents::INLINE);
-            device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
-            device.cmd_bind_descriptor_sets(
-                command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                pipeline_layout,
-                0,
-                &[descriptor_set],
-                &[],
-            );
             device.cmd_bind_vertex_buffers(command_buffer, 0, &[vertex_buffer], &[0]);
             device.cmd_bind_index_buffer(command_buffer, index_buffer, 0, vk::IndexType::UINT32);
-            device.cmd_draw_indexed(command_buffer, indices.len() as u32, 1, 0, 0, 0);
+            for (index, batch) in pass.batches.iter().enumerate() {
+                if batch.index_count == 0 {
+                    continue;
+                }
+                let pipeline = &variants
+                    .iter()
+                    .find(|(key, _)| *key == (batch.depth_write, batch.blend))
+                    .expect("every batch's state pair has a pipeline")
+                    .1;
+                device.cmd_bind_pipeline(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    *pipeline,
+                );
+                device.cmd_bind_descriptor_sets(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    pipeline_layout,
+                    0,
+                    &[descriptor_sets[index]],
+                    &[],
+                );
+                if pass.push_constants {
+                    let alpha_pass = [batch.alpha_pass];
+                    // Four bytes of an `f32`, read as bytes for the push
+                    // constant write.
+                    let alpha_bytes: &[u8] = std::slice::from_raw_parts(
+                        alpha_pass.as_ptr().cast::<u8>(),
+                        std::mem::size_of_val(&alpha_pass),
+                    );
+                    device.cmd_push_constants(
+                        command_buffer,
+                        pipeline_layout,
+                        vk::ShaderStageFlags::FRAGMENT,
+                        0,
+                        alpha_bytes,
+                    );
+                }
+                device.cmd_draw_indexed(
+                    command_buffer,
+                    batch.index_count,
+                    1,
+                    batch.first_index,
+                    0,
+                    0,
+                );
+            }
             device.cmd_end_render_pass(command_buffer);
 
             let copy_region = vk::BufferImageCopy {
@@ -2087,25 +2506,60 @@ impl VulkanDevice {
             device.wait_for_fences(&[fence], true, u64::MAX)?;
         }
 
-        let mut pixels = vec![0u8; readback_size as usize];
+        // The readback, encoded: linear f16 -> sRGB bytes + alpha 255, the
+        // CPU oracle's own `to_image` resolve, on the CPU.
+        let mut half = vec![0u16; width as usize * height as usize * 4];
         unsafe {
             let ptr = device.map_memory(
                 readback_memory,
                 0,
                 readback_size,
                 vk::MemoryMapFlags::empty(),
-            )? as *const u8;
-            std::ptr::copy_nonoverlapping(ptr, pixels.as_mut_ptr(), readback_size as usize);
+            )? as *const u16;
+            std::ptr::copy_nonoverlapping(ptr, half.as_mut_ptr(), half.len());
             device.unmap_memory(readback_memory);
+        }
+        let mut pixels = vec![0u8; half.len()];
+        for (texel, out) in half
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(pixels.as_chunks_mut::<4>().0)
+        {
+            let rgb = [
+                crate::scene_exec::half_to_f32(texel[0]),
+                crate::scene_exec::half_to_f32(texel[1]),
+                crate::scene_exec::half_to_f32(texel[2]),
+            ];
+            out.copy_from_slice(&[
+                bg_byte(srgb(rgb[0])),
+                bg_byte(srgb(rgb[1])),
+                bg_byte(srgb(rgb[2])),
+                255,
+            ]);
         }
 
         unsafe {
             device.destroy_fence(fence, None);
             device.destroy_command_pool(command_pool, None);
-            device.destroy_pipeline(pipeline, None);
+            for (_, pipeline) in variants {
+                device.destroy_pipeline(pipeline, None);
+            }
             device.destroy_pipeline_layout(pipeline_layout, None);
             device.destroy_shader_module(vs_module, None);
             device.destroy_shader_module(fs_module, None);
+            for (_, sampler) in samplers {
+                device.destroy_sampler(sampler, None);
+            }
+            for uploaded in uploaded_textures {
+                device.destroy_image_view(uploaded.view, None);
+                device.free_memory(uploaded.memory, None);
+                device.destroy_image(uploaded.image, None);
+            }
+            for (staging, memory) in staging_uploads {
+                device.free_memory(memory, None);
+                device.destroy_buffer(staging, None);
+            }
             device.destroy_descriptor_pool(descriptor_pool, None);
             device.destroy_descriptor_set_layout(set_layout, None);
             device.free_memory(readback_memory, None);
@@ -2190,6 +2644,42 @@ fn bytemuck_cast_positions(positions: &[[f32; 2]]) -> &[u8] {
     }
 }
 
+/// One textured, blended slice of a 3D pass's geometry — see
+/// [`VulkanDevice::render_lit3d_to_pixels`].
+#[derive(Debug, Clone, Copy)]
+pub struct Texture3d<'a> {
+    /// Texel columns.
+    pub width: u32,
+    /// Texel rows.
+    pub height: u32,
+    /// Linear-light RGBA, row-major, origin top row — the CPU oracle's own
+    /// texels ([`vieww_3d::scene::Texture::texels`]), uploaded as f16.
+    pub texels: &'a [[f32; 4]],
+    /// `true` for nearest-neighbour sampling, `false` for bilinear — the
+    /// material's own `Filter`.
+    pub nearest: bool,
+}
+
+/// One draw of a 3D pass: `indices[first_index ..][.. index_count]` through
+/// one texture, one depth-write and blend state, and one half of the
+/// transparent split.
+#[derive(Debug, Clone, Copy)]
+pub struct Batch3d<'a> {
+    /// Offset of the first index.
+    pub first_index: u32,
+    /// How many indices this batch draws.
+    pub index_count: u32,
+    /// Whether the depth test writes (the `a >= 1.0` half of the split).
+    pub depth_write: bool,
+    /// Whether the colour blends straight-alpha-over (the `a < 1.0` half).
+    pub blend: bool,
+    /// The batch's half of the transparent split: 0 keeps `a >= 1.0`
+    /// fragments, 1 keeps `a < 1.0`. See `lit3d.wgsl`.
+    pub alpha_pass: f32,
+    /// The batch's texture, if it has one.
+    pub texture: Option<Texture3d<'a>>,
+}
+
 /// What [`VulkanDevice::render_3d_pass`] draws.
 struct Pass3d<'a> {
     wgsl: &'a str,
@@ -2203,6 +2693,14 @@ struct Pass3d<'a> {
     uniforms: &'a [u8],
     /// Binding 1, fragment stage, when present.
     storage: Option<&'a [u8]>,
+    /// Whether the shader samples a texture at binding 2 (and a sampler at
+    /// 3) — the lit pass does, the unlit pass does not.
+    sampled: bool,
+    /// Whether the shader reads `var<immediate>` push constants (the lit
+    /// pass's transparent-split flag).
+    push_constants: bool,
+    /// The draws, in order.
+    batches: &'a [Batch3d<'a>],
 }
 
 fn bytemuck_cast_u32(values: &[u32]) -> &[u8] {

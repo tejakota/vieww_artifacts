@@ -62,8 +62,10 @@
 //!
 //! `metal` and `d3d12` are `cfg`-gated to their own operating systems and do
 //! not compile — or appear in this doc build — as part of this Linux build at
-//! all; see each module's own source comments for exactly what that means and
-//! how to validate them on a machine that has the toolchain.
+//! all. Since 2026-10-24 each carries a full `SceneRenderer` port over the
+//! shared `scene_exec` traversal — see those modules' docs, and
+//! `tests/metal_scene.rs`/`tests/d3d12_scene.rs`, for what they cover and
+//! how each is validated on a machine that has the toolchain.
 
 use vieww_foundation::Color;
 
@@ -111,6 +113,13 @@ pub struct AdapterInfo {
 
 #[cfg(feature = "vulkan")]
 pub mod vulkan;
+
+/// The backend-agnostic execution of a `vieww_gpu::ScenePlan`: the
+/// plan-to-operations traversal every backend's scene renderer interprets —
+/// Vulkan's own since it was extracted, and the Metal and D3D12 ports' from
+/// their first line. Pure logic over the plan, so its tests run on every
+/// platform with no GPU at all.
+pub mod scene_exec;
 
 /// The Metal backend (spec §4.3) — macOS and iOS.
 ///

@@ -1031,17 +1031,37 @@ impl NativeRenderer {
     }
 
     /// The planner's assumed profile for this window's device.
+    ///
+    /// `VIEWW_PLANNER_CALIBRATE=1` (read once per process) additionally runs
+    /// [`vieww_render_planner::probe::calibrate_cpu_fill`]: a one-time,
+    /// single-digit-millisecond startup micro-benchmark that replaces the
+    /// profile's round-number CPU fill throughput with a measurement of this
+    /// machine's own rasterizer, and fills `cpu_cores` from the scheduler.
+    /// The GPU fields stay as `profile_for` guessed them — the shadow log's
+    /// own `Calibration` is the measured path for those, and this function
+    /// is called once per window, not per frame.
     fn planner_profile(&self) -> DeviceProfile {
         use vieww_hal::Device as _;
         // On the CPU present path no device was opened to ask; plan as this
         // kind of machine's usual GPU, which is what the log is for.
-        self.device.as_ref().map_or_else(
+        let mut profile = self.device.as_ref().map_or_else(
             || profile_for(""),
             |device| profile_for(&device.info().device_type),
-        )
+        );
+        if planner_calibration() {
+            profile = vieww_render_planner::probe::calibrate_cpu_fill(profile);
+        }
+        profile
     }
 
     /// Plan `scene` in shadow and log what actually happened to it.
+    ///
+    /// On a GPU frame the backend's own timestamp-query buckets
+    /// ([`GpuPassTimes`], in `stages.gpu_passes`) are fed into the planner's
+    /// measured-cost history first — the connection the planner's audit asked
+    /// for: real per-kind GPU timings, per frame, from the live loop. They
+    /// only ever refine the plan an *authoritative* planner acts on (see
+    /// `ShadowPlanner::note_gpu_pass_kind`), never the logged predictions.
     fn record_shadow(
         &mut self,
         scene: &Scene,
@@ -1049,9 +1069,48 @@ impl NativeRenderer {
         executor: Executor,
         fallback: Option<String>,
     ) {
+        // Read before the mutable shadow borrow: the timings are this
+        // frame's, already settled in `stages`.
+        let gpu_kinds = self.stages.gpu_passes;
         let Some(shadow) = self.shadow.as_mut().filter(|s| !s.broken) else {
             return;
         };
+        // A bucket the timestamps did not touch is a zero: an absence, which
+        // `note_gpu_pass_kind` ignores rather than records as free work.
+        let note = |planner: &mut ShadowPlanner, kind: &'static str, ms: std::time::Duration| {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "a GPU timing in ms fits an f32"
+            )]
+            planner.note_gpu_pass_kind(kind, (ms.as_secs_f64() * 1000.0) as f32);
+        };
+        if let Some(kinds) = gpu_kinds {
+            note(
+                &mut shadow.planner,
+                vieww_render_planner::measured_kinds::DRAW,
+                kinds.draw,
+            );
+            note(
+                &mut shadow.planner,
+                vieww_render_planner::measured_kinds::LAYERS,
+                kinds.layers,
+            );
+            note(
+                &mut shadow.planner,
+                vieww_render_planner::measured_kinds::FILTERS,
+                kinds.filters,
+            );
+            note(
+                &mut shadow.planner,
+                vieww_render_planner::measured_kinds::SHADOWS,
+                kinds.shadows,
+            );
+            note(
+                &mut shadow.planner,
+                vieww_render_planner::measured_kinds::BLIT,
+                kinds.blit,
+            );
+        }
         // A pending plan (authoritative mode planned this frame *before*
         // it drew, to decide who drew it) is the prediction to record —
         // replanning would measure the model against a different answer
@@ -1498,7 +1557,12 @@ impl NativeRenderer {
         // gate a prediction for a picture nobody drew is how a gate rots.
         // The plan is stashed so `record_shadow` records the prediction
         // the decision was made on, not a second one.
-        let mut planner_cpu = false;
+        // The planner's actuation, when it has one: a whole-frame CPU
+        // recommendation, or — since the split-frame path landed — a
+        // `Mixed` one, with the CPU band's fraction read off the plan the
+        // decision was made on.
+        let mut planner_act: Option<Executor> = None;
+        let mut mixed_cpu_fraction: Option<f32> = None;
         if render_scale == 1.0 {
             if let Some(shadow) = self
                 .shadow
@@ -1509,13 +1573,16 @@ impl NativeRenderer {
                     .planner
                     .plan_for_frame(scene.as_ref(), extent.0, extent.1);
                 if let Some(plan) = plan {
-                    planner_cpu = act == Some(Executor::Cpu);
+                    if act == Some(Executor::Mixed) {
+                        mixed_cpu_fraction = Some(plan.mixed_cpu_fraction());
+                    }
+                    planner_act = act;
                     shadow.pending = Some((act, plan));
                 }
             }
         }
 
-        if planner_cpu {
+        if planner_act == Some(Executor::Cpu) {
             // The planner's decision, not a plan with gaps: the GPU
             // rasterizer is healthy, it was simply told this frame is not
             // worth its overhead. The fallback string says which, so a
@@ -1537,6 +1604,73 @@ impl NativeRenderer {
             let planning = Instant::now();
             let plan = planner.plan(scene.as_ref(), width, height);
             self.stages.plan = planning.elapsed();
+            // **The split frame: a `Mixed` recommendation, executed.** Both
+            // sides render the same frame; a row band decides whose pixels
+            // show — see `crate::mixed`. The GPU draws only its band,
+            // through the damage path; the CPU rasterises the frame as it
+            // always does and supplies the CPU band's rows. A plan with
+            // gaps cannot split (the GPU half would be missing pieces), so
+            // the whole-frame paths below still arbitrate.
+            if let Some(fraction) =
+                mixed_cpu_fraction.filter(|_| planner_act == Some(Executor::Mixed))
+            {
+                if plan.is_complete() {
+                    let bands = crate::mixed::Bands::from_fraction(physical_height, fraction);
+                    let rasterising = Instant::now();
+                    let report = self.cpu.render_in_place(
+                        scene.as_ref(),
+                        physical_width,
+                        physical_height,
+                        base,
+                    )?;
+                    self.stages.cpu_raster = rasterising.elapsed();
+                    self.stages.cpu_core = current_core();
+                    let band = bands.gpu_band(physical_width, physical_height);
+                    let damage: Option<Vec<PixelRect>> = band.map(|b| vec![b]);
+                    let (gpu_pixels, _redrawn) = renderer
+                        .render_planned_damaged(
+                            planner,
+                            &plan,
+                            physical_width,
+                            physical_height,
+                            base,
+                            damage.as_deref(),
+                        )
+                        .map_err(|error| NativeError::Render(error.to_string()))?;
+                    self.stages.gpu = renderer.last_timings();
+                    self.stages.gpu_passes = renderer.last_pass_times();
+                    let merged = crate::mixed::merge(
+                        self.cpu.last_frame(),
+                        &gpu_pixels,
+                        &bands,
+                        physical_width,
+                        physical_height,
+                    );
+                    let presenting = Instant::now();
+                    device
+                        .present_pixels(swapchain, &merged)
+                        .map_err(|error| NativeError::Present(error.to_string()))?;
+                    self.stages.present = presenting.elapsed();
+                    let reason = self.shadow.as_ref().map(|_| {
+                        format!(
+                            "split frame: cpu rows 0..{}, gpu rows {}..{physical_height}",
+                            bands.cpu_rows, bands.cpu_rows
+                        )
+                    });
+                    self.record_shadow(&scene, extent, Executor::Mixed, reason);
+                    // The GPU's own target does not hold this frame — its
+                    // CPU band is the renderer's retained previous content —
+                    // so the next GPU frame must not trust it for damage.
+                    self.gpu_frame_current = None;
+                    return Ok(PlannedFrame {
+                        report,
+                        drawn_on_gpu: false,
+                        presented_directly: false,
+                        stages: self.stages,
+                        gpu_redrawn: None,
+                    });
+                }
+            }
             if plan.is_complete() {
                 // Straight into the swapchain image when the frame is opaque
                 // and the driver can blit the scene's RGBA16F into the
@@ -1695,6 +1829,18 @@ pub fn gpu_overlap() -> bool {
 /// coverage reaching a pixel past it. Redrawing a pixel that did not change
 /// is always correct; missing one that did leaves a stale edge.
 const GPU_DAMAGE_MARGIN: i32 = 2;
+
+/// Whether the planner's profile is calibrated against this machine at
+/// startup (`VIEWW_PLANNER_CALIBRATE=1`): a one-time CPU fill micro-benchmark
+/// plus core-count detection, replacing the profile's round-number guesses
+/// with measured numbers — see `planner_profile`. Off by default, like every
+/// planner diagnostic, because the benchmark costs time and the guesses are
+/// what every existing log was recorded against. Read once per process.
+#[must_use]
+fn planner_calibration() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("VIEWW_PLANNER_CALIBRATE").is_ok_and(|v| v.trim() == "1"))
+}
 
 /// A damaged region from [`Changed::from_damage`], grown by
 /// [`GPU_DAMAGE_MARGIN`]; the renderer clamps it to its frame.

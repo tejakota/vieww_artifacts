@@ -27,6 +27,7 @@ pub mod hybrid;
 pub mod planner;
 pub mod policy;
 pub mod power;
+pub mod probe;
 pub mod quality;
 pub mod shadow;
 
@@ -35,11 +36,15 @@ pub use cost::{CostModel, ExecutorEstimate, HeuristicCostModel, MeasuredCostMode
 pub use frame_budget::FrameBudget;
 pub use hybrid::Split;
 pub use planner::{plan_frame, work_pixels, FramePlan};
-pub use policy::Placement;
+pub use policy::{hybrid_min_pixels, Placement, HYBRID_MIN_PIXELS};
+#[cfg(feature = "calibrate")]
+pub use probe::calibrate_cpu_fill;
+pub use probe::{detect_cpu_cores, with_detected_cores};
 pub use quality::{
     QualityContract, QualityObservation, QualityReport, QualityViolation, RefreshRate,
 };
 pub use shadow::{
-    Calibration, Executor, PassSummary, PlannerMode, Recommendation, ShadowFrame, ShadowPlan,
-    ShadowPlanner, AUTHORITATIVE_MAX_RMSE, AUTHORITATIVE_MIN_FRAMES,
+    measured_kind, measured_kinds, Calibration, Executor, PassSummary, PlannerMode, RecentError,
+    Recommendation, ShadowFrame, ShadowPlan, ShadowPlanner, TimingRing, AUTHORITATIVE_MAX_RMSE,
+    AUTHORITATIVE_MIN_FRAMES, TIMING_RING_CAPACITY, TIMING_RING_MIN_SAMPLES,
 };

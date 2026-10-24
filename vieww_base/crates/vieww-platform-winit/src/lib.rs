@@ -97,6 +97,10 @@ mod keys;
 mod latency;
 mod lifecycle;
 pub mod locale;
+// Split-frame execution: the Mixed recommendation's path from a planner
+// opinion to pixels on a screen — crate plumbing of native.rs, visible to
+// the crate's own tests: see mixed.rs for what a band split is and is not.
+pub(crate) mod mixed;
 pub mod native;
 mod scale;
 pub mod services;

@@ -66,13 +66,21 @@ use std::ffi::CString;
 use std::time::{Duration, Instant};
 
 use ash::vk;
-use vieww_foundation::{BlendMode, Color};
-use vieww_gpu::{FilterOp, MaskRef, PixelRect, Planner, ScenePlan, Step, Vertex};
+use vieww_foundation::Color;
+use vieww_gpu::{PixelRect, Planner, ScenePlan, Vertex};
+
+use crate::scene_exec::{frame_passes, PassKind, PostPush, Retained, SceneOp, TargetId};
 
 use super::present_history::{self, PresentHistory};
 #[cfg(feature = "vulkan-swapchain")]
 use super::AcquiredImage;
 use super::{translate_wgsl_to_spirv, Stage, VulkanDevice, VulkanError};
+
+// The traversal itself, and the types it shares with this backend's
+// interpreter, live in `crate::scene_exec` — one definition of what a frame
+// does, consumed by this backend and the Metal/D3D12 ports alike.
+pub(super) use crate::scene_exec::disjoint;
+pub use crate::scene_exec::Redrawn;
 
 /// Where `execute` sends the finished frame instead of the readback buffer:
 /// a presentable image, and the semaphore the blit into it must wait on.
@@ -200,46 +208,6 @@ pub struct SceneRenderer {
     pending_probe: Option<PendingProbe>,
 }
 
-/// What the frame target `L[0]` holds after a frame: that frame's finished
-/// pixels, at `size`, drawn over `clear`. A damaged frame keeps them only when
-/// both still describe the frame being drawn.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Retained {
-    size: (u32, u32),
-    clear: Color,
-}
-
-/// How much of the frame target a frame redrew.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Redrawn {
-    /// Every pixel: no damage was given, or what the target held could not
-    /// be kept (a new size or clear colour, a backdrop filter reaching
-    /// outside the damage — see the module docs).
-    Full,
-    /// Only the damage: this many pixels (each rectangle's area, summed).
-    Damage {
-        /// Pixels redrawn.
-        pixels: u64,
-    },
-}
-
-impl Redrawn {
-    /// Pixels redrawn, given the frame's own size for [`Redrawn::Full`].
-    #[must_use]
-    pub const fn pixels(self, width: u32, height: u32) -> u64 {
-        match self {
-            Self::Full => width as u64 * height as u64,
-            Self::Damage { pixels } => pixels,
-        }
-    }
-}
-
-/// More rectangles than this and the damage is redrawn as its bounding box:
-/// every rectangle repeats each top-level draw call under its own scissor,
-/// and past a handful the repeated vertex work costs more than the pixels
-/// it saves.
-const MAX_CLIP_RECTS: usize = 8;
-
 /// Where one frame's time went inside [`SceneRenderer`], on the CPU's clock.
 ///
 /// # Why
@@ -333,16 +301,6 @@ impl GpuPassTimes {
     }
 }
 
-/// The kind of work a timestamp interval is charged to — [`GpuPassTimes`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PassKind {
-    Draw,
-    Layers,
-    Filters,
-    Shadows,
-    Blit,
-}
-
 /// Timestamp slots per frame. A kind changes a few times per layer, filter
 /// or shadow; a frame that changes more often than this charges the rest to
 /// the kind it was in when the slots ran out (`Queries::overflowed`).
@@ -361,14 +319,6 @@ struct Queries {
     overflowed: bool,
     /// A submitted frame whose timestamps have not been read yet.
     pending: bool,
-}
-
-/// Which image a post descriptor set binds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum TargetId {
-    Level(usize),
-    Scratch(usize),
-    Dummy,
 }
 
 struct Buffer {
@@ -450,100 +400,15 @@ impl Slot {
     }
 }
 
-/// Push constants for `post.wgsl`: eight `vec4<f32>`, 128 bytes — the minimum
-/// push-constant size every Vulkan implementation guarantees.
-#[derive(Clone, Copy, Default)]
-#[repr(C)]
-struct PostPush {
-    region: [f32; 4],
-    args: [f32; 4],
-    p: [[f32; 4]; 6],
-}
-
-/// `post.wgsl`'s mode table.
-mod mode {
-    pub(super) const COPY: f32 = 0.0;
-    pub(super) const BOX_H: f32 = 1.0;
-    pub(super) const BOX_V: f32 = 2.0;
-    pub(super) const MATRIX: f32 = 3.0;
-    pub(super) const MASK: f32 = 4.0;
-    pub(super) const BLEND: f32 = 5.0;
-    pub(super) const OVER: f32 = 6.0;
-    pub(super) const SHADOW: f32 = 7.0;
-}
-
-/// `post.wgsl`'s blend-mode numbering: `BlendMode`'s declaration order.
-const fn blend_index(mode: BlendMode) -> f32 {
-    use BlendMode::*;
-    match mode {
-        Normal => 0.0,
-        Clear => 1.0,
-        Src => 2.0,
-        Dst => 3.0,
-        DstOver => 4.0,
-        SrcIn => 5.0,
-        DstIn => 6.0,
-        SrcOut => 7.0,
-        DstOut => 8.0,
-        SrcAtop => 9.0,
-        DstAtop => 10.0,
-        Xor => 11.0,
-        Plus => 12.0,
-        Multiply => 13.0,
-        Screen => 14.0,
-        Overlay => 15.0,
-        Darken => 16.0,
-        Lighten => 17.0,
-        ColorDodge => 18.0,
-        ColorBurn => 19.0,
-        HardLight => 20.0,
-        SoftLight => 21.0,
-        Difference => 22.0,
-        Exclusion => 23.0,
-        Hue => 24.0,
-        Saturation => 25.0,
-        Color => 26.0,
-        Luminosity => 27.0,
-    }
-}
-
-#[allow(clippy::cast_precision_loss)]
-fn region(rect: PixelRect) -> [f32; 4] {
-    [
-        rect.x0 as f32,
-        rect.y0 as f32,
-        rect.x1 as f32,
-        rect.y1 as f32,
-    ]
-}
-
-/// One post pass, described.
-struct Pass {
-    into: TargetId,
-    /// Where it writes.
-    scissor: PixelRect,
-    /// Where `src` is readable; transparent outside.
-    read: PixelRect,
-    src: TargetId,
-    aux: TargetId,
-    over: bool,
-    push: PostPush,
-}
-
-impl Pass {
-    fn new(into: TargetId, rect: PixelRect, src: TargetId, mode: f32) -> Self {
-        let mut push = PostPush::default();
-        push.args[0] = mode;
-        Self {
-            into,
-            scissor: rect,
-            read: rect,
-            src,
-            aux: TargetId::Dummy,
-            over: false,
-            push,
-        }
-    }
+/// Which pipeline the command buffer last bound — the interpreter's bind
+/// dedup. `Post(over)` remembers which of the two post pipelines, because a
+/// run of post passes alternates between them.
+#[derive(Clone, Copy, PartialEq)]
+enum Bound {
+    None,
+    Scene,
+    /// The post pipeline, and whether it is the blending (`over`) one.
+    Post(bool),
 }
 
 impl SceneRenderer {
@@ -1724,92 +1589,19 @@ impl SceneRenderer {
         Ok(())
     }
 
-    /// The damage a frame may actually redraw: `damage` clamped to the frame,
-    /// or `None` (redraw everything) when `L[0]` does not hold the previous
-    /// frame at this size and clear, or a top-level backdrop filter reaches
-    /// outside it. See the module docs.
-    fn usable_clip(
-        &self,
-        plan: &ScenePlan,
-        damage: &[PixelRect],
-        width: u32,
-        height: u32,
-        clear: Color,
-    ) -> Option<Vec<PixelRect>> {
-        let wanted = Retained {
-            size: (width, height),
-            clear,
-        };
-        if self.retained != Some(wanted) {
-            return None;
-        }
-        #[expect(clippy::cast_possible_wrap, reason = "frame extents")]
-        let frame = PixelRect {
-            x0: 0,
-            y0: 0,
-            x1: width as i32,
-            y1: height as i32,
-        };
-        // Disjoint, because every rectangle repeats each top-level draw under
-        // its own scissor: where two overlapped, a translucent draw — a group
-        // opacity, a shadow's tint, a blend — would be applied twice.
-        let mut clip = disjoint(
-            damage
-                .iter()
-                .map(|rect| rect.intersect(frame))
-                .filter(|rect| !rect.is_empty()),
-        );
-        if clip.len() > MAX_CLIP_RECTS {
-            let bounds = clip.iter().fold(clip[0], |a, b| PixelRect {
-                x0: a.x0.min(b.x0),
-                y0: a.y0.min(b.y0),
-                x1: a.x1.max(b.x1),
-                y1: a.y1.max(b.y1),
-            });
-            clip = vec![bounds];
-        }
-        let mut depth = 0usize;
-        for step in &plan.steps {
-            match *step {
-                Step::PushLayer { rect, backdrop } => {
-                    if depth == 0
-                        && backdrop.is_some()
-                        && touches(&clip, rect)
-                        && !clip.iter().any(|c| contains(*c, rect))
-                    {
-                        return None;
-                    }
-                    depth += 1;
-                }
-                Step::PopLayer { .. } => depth = depth.saturating_sub(1),
-                Step::Draw { .. } | Step::Shadow { .. } => {}
-            }
-        }
-        Some(clip)
-    }
-
-    /// For each top-level `PushLayer` whose composite misses `clip`, the
-    /// index of its `PopLayer`: a damaged frame skips the whole layer.
-    fn skippable_layers(plan: &ScenePlan, clip: &[PixelRect]) -> HashMap<usize, usize> {
-        let mut skip = HashMap::new();
-        let mut open: Vec<usize> = Vec::new();
-        for (index, step) in plan.steps.iter().enumerate() {
-            match *step {
-                Step::PushLayer { .. } => open.push(index),
-                Step::PopLayer { composite, .. } => {
-                    if let Some(push) = open.pop() {
-                        if open.is_empty() && !composite.is_some_and(|c| touches(clip, c)) {
-                            skip.insert(push, index);
-                        }
-                    }
-                }
-                Step::Draw { .. } | Step::Shadow { .. } => {}
-            }
-        }
-        skip
-    }
-
-    #[allow(clippy::too_many_lines)]
+    /// Interpret the shared traversal of a frame — see [`crate::scene_exec`]
+    /// — into Vulkan commands, then submit and (unless a swapchain image is
+    /// the destination) read the frame back.
+    ///
+    /// Everything that decides *what* a frame does lives in
+    /// [`scene_exec::frame_passes`](crate::scene_exec::frame_passes): the
+    /// damage a retained frame may keep, the layers a damaged frame skips,
+    /// the scissored regions every draw and post pass is held to, the pass
+    /// order and the push-constant payloads. This half only translates:
+    /// render passes begin and end as the ops say, geometry draws through
+    /// the scene pipeline, post passes through the two post pipelines, and
+    /// the finished frame goes to the readback buffer or the swapchain
+    /// image as `out` says.
     fn execute(
         &mut self,
         plan: &ScenePlan,
@@ -1820,210 +1612,138 @@ impl SceneRenderer {
         damage: Option<&[PixelRect]>,
     ) -> Result<Redrawn, VulkanError> {
         let recording = Instant::now();
-        let clip = damage.and_then(|d| self.usable_clip(plan, d, width, height, clear));
+        let exec = frame_passes(plan, width, height, clear, damage, self.retained);
         // Until this frame finishes, `L[0]` is half-drawn: no later frame may
         // keep it.
         self.retained = None;
-        let skip = clip
-            .as_deref()
-            .map(|c| Self::skippable_layers(plan, c))
-            .unwrap_or_default();
-        let redrawn = clip.as_ref().map_or(Redrawn::Full, |c| Redrawn::Damage {
-            pixels: c
-                .iter()
-                .map(|r| u64::from(r.width()) * u64::from(r.height()))
-                .sum(),
-        });
-        self.frame_clip = clip;
+        self.frame_clip = exec.frame_clip;
         // Every frame changes `L[0]`, whether or not it reaches a swapchain
         // image; an image written later has to catch up on all of them.
         self.presents.record_change(self.frame_clip.as_deref());
         self.begin_commands()?;
         self.begin_marks();
-        let a = f32::from(clear.a) / 255.0;
-        let premultiplied_clear = [
-            f32::from(clear.r) / 255.0 * a,
-            f32::from(clear.g) / 255.0 * a,
-            f32::from(clear.b) / 255.0 * a,
-            a,
-        ];
         let mut rec = Recorder {
             open: None,
             width,
             height,
         };
-        match &self.frame_clip {
-            None => rec.begin(self, TargetId::Level(0), Some(premultiplied_clear)),
-            Some(clip) => {
-                // Keep the previous frame; clear only what this one redraws.
-                rec.begin(self, TargetId::Level(0), None);
-                let rects: Vec<vk::ClearRect> = clip
-                    .iter()
-                    .map(|r| vk::ClearRect {
-                        rect: pixel_scissor(*r),
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    })
-                    .collect();
-                if !rects.is_empty() {
-                    unsafe {
-                        self.device.cmd_clear_attachments(
-                            self.command_buffer,
-                            &[vk::ClearAttachment {
-                                aspect_mask: vk::ImageAspectFlags::COLOR,
-                                color_attachment: 0,
-                                clear_value: vk::ClearValue {
-                                    color: vk::ClearColorValue {
-                                        float32: premultiplied_clear,
+        // Which pipeline (and its descriptor set and buffers) is bound, so a
+        // run of same-kind ops binds once — the dedup the traversal's single
+        // mark per kind already implies.
+        let mut bound = Bound::None;
+        for op in &exec.ops {
+            match op {
+                SceneOp::Begin {
+                    target,
+                    clear,
+                    kind,
+                } => {
+                    if let Some(kind) = kind {
+                        self.mark(*kind);
+                    }
+                    rec.begin(self, *target, *clear);
+                    bound = Bound::None;
+                }
+                SceneOp::ClearRegions { rects, color } => {
+                    let rects: Vec<vk::ClearRect> = rects
+                        .iter()
+                        .map(|r| vk::ClearRect {
+                            rect: pixel_scissor(*r),
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        })
+                        .collect();
+                    if !rects.is_empty() {
+                        unsafe {
+                            self.device.cmd_clear_attachments(
+                                self.command_buffer,
+                                &[vk::ClearAttachment {
+                                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                                    color_attachment: 0,
+                                    clear_value: vk::ClearValue {
+                                        color: vk::ClearColorValue { float32: *color },
                                     },
-                                },
-                            }],
-                            &rects,
+                                }],
+                                &rects,
+                            );
+                        }
+                    }
+                }
+                SceneOp::DrawRun {
+                    target,
+                    first_index,
+                    index_count,
+                    scissor,
+                } => {
+                    self.mark(PassKind::Draw);
+                    rec.ensure_open(self, *target);
+                    if bound != Bound::Scene {
+                        self.bind_scene();
+                        bound = Bound::Scene;
+                    }
+                    unsafe {
+                        self.device.cmd_set_scissor(
+                            self.command_buffer,
+                            0,
+                            &[pixel_scissor(*scissor)],
+                        );
+                        self.device.cmd_draw_indexed(
+                            self.command_buffer,
+                            *index_count,
+                            1,
+                            *first_index,
+                            0,
+                            0,
                         );
                     }
                 }
-            }
-        }
-
-        // The level the innermost open layer draws into.
-        let mut depth = 0usize;
-        let mut index = 0usize;
-        while index < plan.steps.len() {
-            let step = plan.steps[index];
-            if let Some(&pop) = skip.get(&index) {
-                // A top-level layer whose composite misses the damage: none
-                // of it can change a pixel this frame redraws.
-                index = pop + 1;
-                continue;
-            }
-            index += 1;
-            match step {
-                Step::Draw {
-                    first_run,
-                    run_count,
+                SceneOp::Post {
+                    pass,
+                    scissors,
+                    kind,
                 } => {
-                    self.mark(PassKind::Draw);
-                    rec.ensure_open(self, TargetId::Level(depth));
-                    let clip = if depth == 0 {
-                        self.frame_clip.as_deref()
-                    } else {
-                        None
-                    };
-                    self.draw_runs(plan, first_run, run_count, width, height, clip);
-                }
-                Step::PushLayer { rect, backdrop } => {
-                    self.mark(PassKind::Layers);
-                    let parent = depth;
-                    depth += 1;
-                    rec.begin(self, TargetId::Level(depth), Some([0.0; 4]));
-                    if let (Some(filter), false) = (backdrop, rect.is_empty()) {
-                        // Seed with the parent's pixels, then filter that copy
-                        // before any of the layer's own content draws.
-                        self.pass(
-                            &mut rec,
-                            Pass::new(
-                                TargetId::Level(depth),
-                                rect,
-                                TargetId::Level(parent),
-                                mode::COPY,
-                            ),
-                        )?;
-                        self.mark(PassKind::Filters);
-                        self.filter(&mut rec, depth, rect, filter)?;
-                    }
-                }
-                Step::PopLayer {
-                    rect,
-                    composite,
-                    filter,
-                    mask,
-                    blend,
-                    alpha,
-                } => {
-                    let child = depth;
-                    depth = depth.saturating_sub(1);
-                    let mut source = TargetId::Level(child);
-                    if !rect.is_empty() {
-                        if let Some(filter) = filter {
-                            self.mark(PassKind::Filters);
-                            self.filter(&mut rec, child, rect, filter)?;
+                    self.mark(*kind);
+                    let set = self.post_set(pass.src, pass.aux)?;
+                    rec.ensure_open(self, pass.into);
+                    if bound != Bound::Post(pass.over) {
+                        unsafe {
+                            self.device.cmd_bind_pipeline(
+                                self.command_buffer,
+                                vk::PipelineBindPoint::GRAPHICS,
+                                if pass.over {
+                                    self.post_over
+                                } else {
+                                    self.post_replace
+                                },
+                            );
                         }
-                        self.mark(PassKind::Layers);
-                        if let Some(MaskRef { offset }) = mask {
-                            let mut pass =
-                                Pass::new(TargetId::Scratch(child), rect, source, mode::MASK);
-                            pass.push.p[0] = [offset[0], offset[1], 1.0, 0.0];
-                            self.pass(&mut rec, pass)?;
-                            source = TargetId::Scratch(child);
+                        bound = Bound::Post(pass.over);
+                    }
+                    unsafe {
+                        self.device.cmd_bind_descriptor_sets(
+                            self.command_buffer,
+                            vk::PipelineBindPoint::GRAPHICS,
+                            self.post_layout,
+                            0,
+                            &[set],
+                            &[],
+                        );
+                        self.device.cmd_push_constants(
+                            self.command_buffer,
+                            self.post_layout,
+                            vk::ShaderStageFlags::FRAGMENT,
+                            0,
+                            as_bytes(std::slice::from_ref(&pass.push)),
+                        );
+                        for scissor in scissors {
+                            self.device.cmd_set_scissor(
+                                self.command_buffer,
+                                0,
+                                &[pixel_scissor(*scissor)],
+                            );
+                            self.device.cmd_draw(self.command_buffer, 3, 1, 0, 0);
                         }
                     }
-                    let Some(region) = composite else {
-                        continue;
-                    };
-                    self.mark(PassKind::Layers);
-                    if blend == BlendMode::Normal {
-                        let mut pass =
-                            Pass::new(TargetId::Level(depth), region, source, mode::OVER);
-                        pass.read = rect;
-                        pass.over = true;
-                        pass.push.args[3] = alpha;
-                        self.pass(&mut rec, pass)?;
-                    } else {
-                        // Snapshot the destination, then write blend(src × α, dst).
-                        self.pass(
-                            &mut rec,
-                            Pass::new(
-                                TargetId::Scratch(depth),
-                                region,
-                                TargetId::Level(depth),
-                                mode::COPY,
-                            ),
-                        )?;
-                        let mut pass =
-                            Pass::new(TargetId::Level(depth), region, source, mode::BLEND);
-                        pass.read = rect;
-                        pass.aux = TargetId::Scratch(depth);
-                        pass.push.args[2] = blend_index(blend);
-                        pass.push.args[3] = alpha;
-                        self.pass(&mut rec, pass)?;
-                    }
-                }
-                Step::Shadow {
-                    patch,
-                    scissor,
-                    coverage,
-                    color,
-                    clip,
-                } => {
-                    if patch.is_empty() || scissor.is_empty() {
-                        continue;
-                    }
-                    if depth == 0 {
-                        if let Some(clip) = &self.frame_clip {
-                            if !touches(clip, scissor) {
-                                continue;
-                            }
-                        }
-                    }
-                    self.mark(PassKind::Shadows);
-                    // One pass into the target already open: the coverage
-                    // arrives blurred (`vieww_gpu::Step::Shadow`), so there
-                    // is no work target to clear, no blur, and no render
-                    // pass to switch to and back from.
-                    let mut tint = Pass::new(
-                        TargetId::Level(depth),
-                        scissor,
-                        TargetId::Dummy,
-                        mode::SHADOW,
-                    );
-                    tint.read = patch;
-                    tint.over = true;
-                    tint.push.p[0] = [coverage.offset[0], coverage.offset[1], 1.0, 0.0];
-                    tint.push.p[2] = color;
-                    if let Some(clip) = clip {
-                        tint.push.p[1] = [clip.offset[0], clip.offset[1], 1.0, 0.0];
-                    }
-                    self.pass(&mut rec, tint)?;
                 }
             }
         }
@@ -2275,30 +1995,14 @@ impl SceneRenderer {
                 self.collect_probe()?;
             }
         }
-        self.retained = Some(Retained {
-            size: (width, height),
-            clear,
-        });
-        Ok(redrawn)
+        self.retained = Some(exec.retained);
+        Ok(exec.redrawn)
     }
 
-    /// Draw `plan.runs[first_run..][..run_count]`, each under its own
-    /// scissor — and, when `clip` is given, once per clip rectangle under the
-    /// intersection of the two.
-    fn draw_runs(
-        &self,
-        plan: &ScenePlan,
-        first_run: usize,
-        run_count: usize,
-        width: u32,
-        height: u32,
-        clip: Option<&[PixelRect]>,
-    ) {
-        if plan.vertices.is_empty() || plan.indices.is_empty() {
-            return;
-        }
+    /// Bind the scene pipeline, its descriptor set and the geometry buffers —
+    /// the one bind a run of [`SceneOp::DrawRun`] shares.
+    fn bind_scene(&self) {
         let cmd = self.command_buffer;
-        let full = full_rect(width, height);
         unsafe {
             self.device.cmd_bind_pipeline(
                 cmd,
@@ -2317,148 +2021,7 @@ impl SceneRenderer {
                 .cmd_bind_vertex_buffers(cmd, 0, &[self.vertices.handle], &[0]);
             self.device
                 .cmd_bind_index_buffer(cmd, self.indices.handle, 0, vk::IndexType::UINT32);
-            for run in &plan.runs[first_run..first_run + run_count] {
-                let scissor = run.scissor.map_or(full, |r| to_scissor(r, width, height));
-                for scissor in clipped(scissor, clip) {
-                    self.device.cmd_set_scissor(cmd, 0, &[scissor]);
-                    self.device
-                        .cmd_draw_indexed(cmd, run.index_count, 1, run.first_index, 0, 0);
-                }
-            }
         }
-    }
-
-    /// Three horizontal+vertical box passes over `rect` of `L[level]`,
-    /// ping-ponging through `S[level]` and ending back in `L[level]`.
-    fn blur(
-        &mut self,
-        rec: &mut Recorder,
-        level: usize,
-        rect: PixelRect,
-        radius: u32,
-    ) -> Result<(), VulkanError> {
-        #[allow(clippy::cast_precision_loss)]
-        let r = radius as f32;
-        // `post.wgsl`'s `pc.args.z = 1`: past the rect, the nearest edge
-        // pixel — `effects::blur`'s clamped sampling, CSS's `duplicate` edge
-        // mode for `filter` and `backdrop-filter`. (The transparent edge, 0,
-        // was a shadow's; shadows now arrive blurred.)
-        let edge = 1.0;
-        for _ in 0..3 {
-            let mut h = Pass::new(
-                TargetId::Scratch(level),
-                rect,
-                TargetId::Level(level),
-                mode::BOX_H,
-            );
-            h.push.args[1] = r;
-            h.push.args[2] = edge;
-            self.pass(rec, h)?;
-            let mut v = Pass::new(
-                TargetId::Level(level),
-                rect,
-                TargetId::Scratch(level),
-                mode::BOX_V,
-            );
-            v.push.args[1] = r;
-            v.push.args[2] = edge;
-            self.pass(rec, v)?;
-        }
-        Ok(())
-    }
-
-    /// A filter over `rect` of `L[level]`, result left in `L[level]`.
-    fn filter(
-        &mut self,
-        rec: &mut Recorder,
-        level: usize,
-        rect: PixelRect,
-        filter: FilterOp,
-    ) -> Result<(), VulkanError> {
-        if let Some(radius) = filter.box_radius {
-            // Layer and backdrop filters clamp at the rect, as
-            // `effects::blur` does (CSS's `duplicate` edge mode).
-            self.blur(rec, level, rect, radius)?;
-        }
-        if let Some(m) = filter.color_matrix {
-            let mut pass = Pass::new(
-                TargetId::Scratch(level),
-                rect,
-                TargetId::Level(level),
-                mode::MATRIX,
-            );
-            pass.push.p[0] = [m[0], m[1], m[2], m[3]];
-            pass.push.p[1] = [m[5], m[6], m[7], m[8]];
-            pass.push.p[2] = [m[10], m[11], m[12], m[13]];
-            pass.push.p[3] = [m[15], m[16], m[17], m[18]];
-            pass.push.p[4] = [m[4], m[9], m[14], m[19]];
-            self.pass(rec, pass)?;
-            self.pass(
-                rec,
-                Pass::new(
-                    TargetId::Level(level),
-                    rect,
-                    TargetId::Scratch(level),
-                    mode::COPY,
-                ),
-            )?;
-        }
-        Ok(())
-    }
-
-    fn pass(&mut self, rec: &mut Recorder, mut pass: Pass) -> Result<(), VulkanError> {
-        let scissor = to_scissor(pass.scissor.to_rect(), rec.width, rec.height);
-        // A damaged frame redraws only its clip of the frame target and the
-        // frame's own scratch (which a top-level blend snapshots the frame
-        // into, and reads back pixel for pixel).
-        let clip = if matches!(pass.into, TargetId::Level(0) | TargetId::Scratch(0)) {
-            self.frame_clip.clone()
-        } else {
-            None
-        };
-        let scissors = clipped(scissor, clip.as_deref());
-        if scissors.is_empty() {
-            return Ok(());
-        }
-        debug_assert!(
-            pass.into != pass.src && pass.into != pass.aux,
-            "a pass may not read its own target"
-        );
-        let set = self.post_set(pass.src, pass.aux)?;
-        rec.ensure_open(self, pass.into);
-        pass.push.region = region(pass.read);
-        let cmd = self.command_buffer;
-        unsafe {
-            self.device.cmd_bind_pipeline(
-                cmd,
-                vk::PipelineBindPoint::GRAPHICS,
-                if pass.over {
-                    self.post_over
-                } else {
-                    self.post_replace
-                },
-            );
-            self.device.cmd_bind_descriptor_sets(
-                cmd,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.post_layout,
-                0,
-                &[set],
-                &[],
-            );
-            self.device.cmd_push_constants(
-                cmd,
-                self.post_layout,
-                vk::ShaderStageFlags::FRAGMENT,
-                0,
-                as_bytes(std::slice::from_ref(&pass.push)),
-            );
-            for scissor in scissors {
-                self.device.cmd_set_scissor(cmd, 0, &[scissor]);
-                self.device.cmd_draw(cmd, 3, 1, 0, 0);
-            }
-        }
-        Ok(())
     }
 
     /// Submit the recorded command buffer and block until it completes.
@@ -2684,20 +2247,9 @@ impl SceneRenderer {
             std::ptr::copy_nonoverlapping(ptr, half.as_mut_ptr(), texels * 4);
             self.device.unmap_memory(self.readback.memory);
         }
-        let mut out = vec![0u8; texels * 4];
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let byte = |v: f32| (v * 255.0 + 0.5) as u8;
-        for (pixel, slot) in half
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .zip(out.as_chunks_mut::<4>().0)
-        {
-            let [r, g, b, a] = [pixel[0], pixel[1], pixel[2], pixel[3]].map(half_to_f32);
-            let inv = if a > 0.0 { 1.0 / a } else { 0.0 };
-            slot.copy_from_slice(&[byte(r * inv), byte(g * inv), byte(b * inv), byte(a)]);
-        }
-        Ok(out)
+        // The shared readback conversion — see `scene_exec`'s module doc for
+        // why "what a finished frame reads back as" is one definition.
+        Ok(crate::scene_exec::straight_rgba8_from_rgba16f(&half))
     }
 }
 
@@ -3199,111 +2751,6 @@ const fn pixel_scissor(rect: PixelRect) -> vk::Rect2D {
     }
 }
 
-/// `scissor` itself, or its intersection with each of `clip`'s rectangles;
-/// empty results dropped either way.
-#[expect(clippy::cast_possible_wrap, reason = "frame extents")]
-fn clipped(scissor: vk::Rect2D, clip: Option<&[PixelRect]>) -> Vec<vk::Rect2D> {
-    let empty = |s: &vk::Rect2D| s.extent.width == 0 || s.extent.height == 0;
-    let Some(clip) = clip else {
-        return if empty(&scissor) {
-            Vec::new()
-        } else {
-            vec![scissor]
-        };
-    };
-    let own = PixelRect {
-        x0: scissor.offset.x,
-        y0: scissor.offset.y,
-        x1: scissor.offset.x + scissor.extent.width as i32,
-        y1: scissor.offset.y + scissor.extent.height as i32,
-    };
-    clip.iter()
-        .map(|c| pixel_scissor(own.intersect(*c)))
-        .filter(|s| !empty(s))
-        .collect()
-}
-
-/// `rects`' union as rectangles that do not overlap: each one minus every
-/// rectangle already taken, as up to four bands around the overlap.
-pub(super) fn disjoint(rects: impl IntoIterator<Item = PixelRect>) -> Vec<PixelRect> {
-    let mut out: Vec<PixelRect> = Vec::new();
-    for rect in rects {
-        let mut pieces = vec![rect];
-        for taken in &out {
-            pieces = pieces
-                .into_iter()
-                .flat_map(|piece| subtract(piece, *taken))
-                .collect();
-        }
-        out.extend(pieces);
-    }
-    out
-}
-
-/// `a` minus `b`: what is left of `a` as up to four non-overlapping bands
-/// (above, below, then left and right of the overlap).
-fn subtract(a: PixelRect, b: PixelRect) -> Vec<PixelRect> {
-    let overlap = a.intersect(b);
-    if overlap.is_empty() {
-        return vec![a];
-    }
-    let bands = [
-        PixelRect {
-            y1: overlap.y0,
-            ..a
-        },
-        PixelRect {
-            y0: overlap.y1,
-            ..a
-        },
-        PixelRect {
-            y0: overlap.y0,
-            y1: overlap.y1,
-            x1: overlap.x0,
-            ..a
-        },
-        PixelRect {
-            y0: overlap.y0,
-            y1: overlap.y1,
-            x0: overlap.x1,
-            ..a
-        },
-    ];
-    bands.into_iter().filter(|band| !band.is_empty()).collect()
-}
-
-/// Whether `rect` overlaps any of `clip`'s rectangles.
-fn touches(clip: &[PixelRect], rect: PixelRect) -> bool {
-    clip.iter().any(|c| !c.intersect(rect).is_empty())
-}
-
-/// Whether `outer` contains all of `inner`.
-const fn contains(outer: PixelRect, inner: PixelRect) -> bool {
-    outer.x0 <= inner.x0 && outer.y0 <= inner.y0 && outer.x1 >= inner.x1 && outer.y1 >= inner.y1
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_possible_wrap
-)]
-fn to_scissor(rect: vieww_foundation::Rect, width: u32, height: u32) -> vk::Rect2D {
-    let left = (rect.left.floor().max(0.0) as u32).min(width);
-    let top = (rect.top.floor().max(0.0) as u32).min(height);
-    let right = (rect.right.ceil().max(0.0) as u32).min(width);
-    let bottom = (rect.bottom.ceil().max(0.0) as u32).min(height);
-    vk::Rect2D {
-        offset: vk::Offset2D {
-            x: left as i32,
-            y: top as i32,
-        },
-        extent: vk::Extent2D {
-            width: right.saturating_sub(left),
-            height: bottom.saturating_sub(top),
-        },
-    }
-}
-
 fn allocate_buffer(
     device: &ash::Device,
     usage: vk::BufferUsageFlags,
@@ -3409,22 +2856,9 @@ fn pick_memory_type(
         .ok_or_else(|| VulkanError::Vulkan("no suitable memory type".into()))
 }
 
-/// IEEE 754 binary16 → `f32`.
-fn half_to_f32(h: u16) -> f32 {
-    let sign = if h & 0x8000 == 0 { 1.0 } else { -1.0 };
-    let exponent = i32::from((h >> 10) & 0x1f);
-    let mantissa = f32::from(h & 0x3ff);
-    match exponent {
-        0 => sign * mantissa * 2f32.powi(-24),
-        31 if mantissa == 0.0 => sign * f32::INFINITY,
-        31 => f32::NAN,
-        e => sign * (1.0 + mantissa / 1024.0) * 2f32.powi(e - 15),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::half_to_f32;
+    use crate::scene_exec::half_to_f32;
 
     #[test]
     fn damage_becomes_disjoint_and_keeps_its_union() {

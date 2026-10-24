@@ -20,25 +20,40 @@
 //!
 //! - **Unlit** — every visible material `Shading::Basic`: flat base colour
 //!   plus emissive, one depth-tested draw (`tests/gpu_unlit.rs`).
-//! - **Lit** — any `Shading::Lambert` material in the frame: Lambert (and
-//!   Basic, in the same draw) under ambient, hemisphere and directional
-//!   lights, with the first shadow-casting directional light's shadow map
-//!   (`tests/gpu_lit.rs`). The shadow map is the CPU renderer's own
-//!   `shadow_pass` output, uploaded — so the two renderers make the same
-//!   shadow decision per point — and back faces are decided per triangle
-//!   here while packing, exactly as the CPU rasterizer culls or flips them.
+//! - **Lit** — any `Shading::Lambert` or `Shading::Phong` material in the
+//!   frame: Lambert (and Basic, in the same draw) under ambient, hemisphere,
+//!   directional, point and spot lights, with the first shadow-casting
+//!   directional light's shadow map (`tests/gpu_lit.rs`). Phong adds the
+//!   CPU's Blinn–Phong specular term — `pow(max(n·hv, 0),
+//!   max(shininess, 1)) * specular` in white — under the same radiance;
+//!   point and spot lights carry the CPU renderer's falloff and cone
+//!   formulas verbatim in `lit3d.wgsl`. The shadow map is the CPU
+//!   renderer's own `shadow_pass` output, uploaded — so the two renderers
+//!   make the same shadow decision per point — and back faces are decided
+//!   per triangle here while packing, exactly as the CPU rasterizer culls
+//!   or flips them.
 //!
 //! Both are held to the CPU oracle: interiors match, disagreements hug
-//! edges. Everything outside the reach — Phong/Standard/Toon/Normal shading,
-//! textures, transparency, wireframe, custom shaders, point and spot lights,
-//! image-based lighting and GI probes, fog, skyboxes, point clouds, more than
-//! eight lights — **falls back to the CPU renderer for the whole frame**, so
-//! `render` never returns anything the CPU would not have returned. The
-//! fallback is per frame, not per object: mixing half a GPU frame with half a
-//! CPU one would be neither oracle-clean nor cheaper to reason about.
+//! edges. Everything outside the reach — Standard/Toon/Normal shading,
+//! textures, transparency, wireframe, custom shaders, image-based lighting
+//! and GI probes, fog, skyboxes, point clouds, more than eight lights —
+//! **falls back to the CPU renderer for the whole frame**, so `render`
+//! never returns anything the CPU would not have returned. The fallback is
+//! per frame, not per object: mixing half a GPU frame with half a CPU one
+//! would be neither oracle-clean nor cheaper to reason about.
 //!
-//! The reach grows the way the 2D path's did: Phong and point/spot lights,
-//! textures, then the transparent pass, each with its own parity assertions.
+//! The reach grows the way the 2D path's did — Phong and point/spot lights
+//! landed together because the specular term is meaningless without a light
+//! to reflect; textures and the transparent pass landed together the same
+//! way, because a texture's alpha channel is what makes a material
+//! translucent. A textured or translucent material now stays on the GPU:
+//! its texels (the oracle's own, uploaded as f16) multiply albedo and set
+//! alpha exactly as `shade` does, and the CPU's per-fragment
+//! write-or-blend rule is drawn as two passes per batch — `a >= 1.0`
+//! fragments with depth writes, `a < 1.0` fragments blended in linear
+//! light — two disjoint sets, the same pixels the oracle's single pass
+//! produces. Standard/Toon/Normal, wireframe, custom shaders, fog and
+//! skyboxes still fall back to the CPU for the whole frame.
 //!
 //! # What the stats mean here
 //!
@@ -54,7 +69,7 @@ use std::sync::Arc;
 use vieww_foundation::Image;
 
 use crate::math::{Mat4, Vec3};
-use crate::render::{frustum, sphere_visible, world_lights, Item, RenderStats, Renderer};
+use crate::render::{frustum, sphere_visible, world_lights, Item, LightW, RenderStats, Renderer};
 use crate::scene::{Camera, Content, Light, Material, Projection, Scene, Shading};
 
 /// A `(scene, camera) → Image` renderer whose pixels come from Vulkan when
@@ -181,11 +196,15 @@ impl GpuRenderer {
                 return true;
             }
             stats.triangles += mesh.indices.len() / 3;
+            // The CPU's own view depth — the negative view-space z of the
+            // bounds centre — so the transparent pass sorts the same list
+            // the same way here as `render_frame` does there.
+            let vd = -view.transform_point(c).z;
             items.push(Item {
                 model,
                 mesh,
                 material: material.clone(),
-                view_depth: 0.0,
+                view_depth: vd,
             });
             true
         };
@@ -304,9 +323,18 @@ impl GpuRenderer {
         }
 
         let bg = [scene.background.r, scene.background.g, scene.background.b];
-        let lit = items
-            .iter()
-            .any(|it| it.material.shading == Shading::Lambert);
+        // The lit pass is also where a texture or a translucent material
+        // draws: its shader samples, and its two-pass transparent split is
+        // the only thing that can express `texel.a * opacity` per fragment.
+        // The unlit pass stays what it always was: flat `Basic` colours,
+        // opaque, no map.
+        let lit = items.iter().any(|it| {
+            matches!(
+                it.material.shading,
+                Shading::Lambert | Shading::Phong { .. }
+            ) || it.material.map.is_some()
+                || it.material.opacity < 1.0
+        });
         let result = if lit {
             match self.lit_frame(gpu, scene, camera, &vp, &view, &items, &mut stats) {
                 Some(result) => result,
@@ -359,9 +387,9 @@ impl GpuRenderer {
     }
 
     /// The lit pass, or `None` when the scene needs something it does not
-    /// have — a light kind other than ambient, hemisphere or directional,
-    /// more than [`MAX_LIGHTS`], or image-based lighting / GI probes, which
-    /// every lit material receives.
+    /// have — a light kind other than ambient, hemisphere, directional,
+    /// point or spot, more than [`MAX_LIGHTS`], or image-based lighting /
+    /// GI probes, which every lit material receives.
     #[allow(
         clippy::too_many_arguments,
         clippy::too_many_lines,
@@ -377,6 +405,7 @@ impl GpuRenderer {
         items: &[Item],
         stats: &mut RenderStats,
     ) -> Option<Result<Vec<u8>, vieww_hal::vulkan::VulkanError>> {
+        let _ = view;
         if scene.environment.is_some() || scene.gi.is_some() {
             return None;
         }
@@ -390,7 +419,9 @@ impl GpuRenderer {
         let shadow = cpu.shadow_pass(&lights, items, stats);
 
         // --- uniforms (std140, `lit3d.wgsl`'s `Uniforms`) ---------------------
-        let mut u = Vec::with_capacity(40 + 12 * MAX_LIGHTS);
+        // Five vec4s per light now (the point/spot `pos_range` and `cone`),
+        // so a light record is 20 floats and the whole block 40 + 20 * 8.
+        let mut u = Vec::with_capacity(40 + 20 * MAX_LIGHTS);
         let flat = |m: &Mat4| -> [f32; 16] { std::array::from_fn(|i| m.m[i / 4][i % 4]) };
         u.extend_from_slice(&flat(vp));
         u.extend_from_slice(&flat(&shadow.as_ref().map_or(Mat4::IDENTITY, |s| s.vp)));
@@ -407,44 +438,9 @@ impl GpuRenderer {
             0.0,
         ]);
         for l in &lights {
-            let d = l.direction;
-            let packed = match l.light {
-                Light::Ambient { color, intensity } => [
-                    color.r, color.g, color.b, 0.0, 0.0, 0.0, 0.0, intensity, 0.0, 0.0, 0.0, 0.0,
-                ],
-                Light::Hemisphere {
-                    sky,
-                    ground,
-                    intensity,
-                } => [
-                    sky.r, sky.g, sky.b, 1.0, 0.0, 0.0, 0.0, intensity, ground.r, ground.g,
-                    ground.b, 0.0,
-                ],
-                Light::Directional {
-                    color,
-                    intensity,
-                    shadow,
-                    ..
-                } => [
-                    color.r,
-                    color.g,
-                    color.b,
-                    2.0,
-                    d.x,
-                    d.y,
-                    d.z,
-                    intensity,
-                    0.0,
-                    0.0,
-                    0.0,
-                    if shadow { 1.0 } else { 0.0 },
-                ],
-                // Point and spot lights are not in the pass yet.
-                _ => return None,
-            };
-            u.extend_from_slice(&packed);
+            u.extend_from_slice(&pack_light(l));
         }
-        u.resize(40 + 12 * MAX_LIGHTS, 0.0);
+        u.resize(40 + 20 * MAX_LIGHTS, 0.0);
 
         // The shadow map's depths; `INFINITY` (nothing casts) as the largest
         // finite float, which compares the same against any NDC depth.
@@ -463,18 +459,29 @@ impl GpuRenderer {
         // needs no culling state and no facing test.
         let view_axis = Vec3::new(view.m[0][2], view.m[1][2], view.m[2][2]);
         let perspective = matches!(camera.projection, Projection::Perspective { .. });
-        let mut vertices: Vec<[f32; 16]> = Vec::new();
+        let mut vertices: Vec<[f32; 20]> = Vec::new();
+        // Each item's vertex range, in `items` order — the draws below
+        // address the geometry through these.
+        let mut ranges: Vec<(u32, u32)> = Vec::with_capacity(items.len());
         for it in items {
             let mesh = &it.mesh;
             let mat = &it.material;
-            let lambert = if mat.shading == Shading::Lambert {
-                1.0
-            } else {
-                0.0
+            // The shading kind the fragment shader switches on: 0 Basic,
+            // 1 Lambert, 2 Phong — and, for Phong, the material's exponent
+            // and specular scale riding in the record's two spare floats.
+            let (kind, shininess, specular) = match mat.shading {
+                Shading::Lambert => (1.0, 0.0, 0.0),
+                Shading::Phong {
+                    shininess,
+                    specular,
+                } => (2.0, shininess, specular),
+                Shading::Basic => (0.0, 0.0, 0.0),
+                _ => return None, // unreachable: `material_reachable` filtered it
             };
             let receive = if mat.receive_shadow { 1.0 } else { 0.0 };
             let normal_m = it.model.inverse().map_or(it.model, |m| m.transpose());
             let has_n = mesh.has_normals();
+            let has_uv = mesh.has_uvs();
             let world: Vec<Vec3> = mesh
                 .positions
                 .iter()
@@ -488,6 +495,7 @@ impl GpuRenderer {
             } else {
                 Vec::new()
             };
+            let first = vertices.len() as u32;
             for t in mesh.indices.as_chunks::<3>().0 {
                 let [a, b, c] = t.map(|i| i as usize);
                 let face_n = (world[b] - world[a]).cross(world[c] - world[a]).normalize();
@@ -511,11 +519,12 @@ impl GpuRenderer {
                         normals[i]
                     } * sign;
                     let p = world[i];
+                    let uv = if has_uv { mesh.uvs[i] } else { [0.0, 0.0] };
                     vertices.push([
                         p.x,
                         p.y,
                         p.z,
-                        lambert,
+                        kind,
                         n.x,
                         n.y,
                         n.z,
@@ -523,18 +532,126 @@ impl GpuRenderer {
                         mat.color.r,
                         mat.color.g,
                         mat.color.b,
-                        0.0,
+                        shininess,
                         mat.emissive.r,
                         mat.emissive.g,
                         mat.emissive.b,
-                        0.0,
+                        specular,
+                        uv[0],
+                        uv[1],
+                        mat.opacity,
+                        if mat.map.is_some() { 1.0 } else { 0.0 },
                     ]);
+                }
+            }
+            ranges.push((first, vertices.len() as u32 - first));
+        }
+
+        // --- the draw order: the CPU's own ------------------------------------
+        //
+        // Opaque items in scene order, then transparent ones sorted far to
+        // near — `render_frame`'s partition and sort, reproduced so equal
+        // depths tie the same way. Each item draws at most twice: the
+        // `a >= 1.0` half (depth writes, no blending) and the `a < 1.0`
+        // half (blending, no depth writes) — the CPU's per-fragment
+        // write-or-lerp rule, which fixed-function blending cannot switch
+        // per fragment, drawn as two disjoint fragment sets.
+        let (opaque, mut transparent): (Vec<&Item>, Vec<&Item>) =
+            items.iter().partition(|i| i.material.opacity >= 1.0);
+        transparent.sort_by(|a, b| b.view_depth.total_cmp(&a.view_depth));
+        stats.transparent = transparent.len();
+
+        #[derive(Clone, Copy, PartialEq)]
+        enum Half {
+            /// Keep `a >= 1.0`: write colour and depth.
+            Write,
+            /// Keep `a < 1.0`: blend, no depth write.
+            Blend,
+        }
+        // `a = texel.a * opacity` reaches 1.0 only when the opacity does,
+        // and can fall below it only through a texture's alpha.
+        let needs = |it: &Item, half: Half| match half {
+            Half::Write => it.material.opacity >= 1.0,
+            Half::Blend => it.material.opacity < 1.0 || it.material.map.is_some(),
+        };
+        let mut draws: Vec<(&Item, Half, u32, u32)> = Vec::new();
+        for it in opaque.iter().chain(transparent.iter()) {
+            let index = items
+                .iter()
+                .position(|x| std::ptr::eq(x, *it))
+                .expect("every drawn item is in the item list");
+            let (first, count) = ranges[index];
+            for half in [Half::Write, Half::Blend] {
+                if needs(it, half) {
+                    draws.push((it, half, first, count));
                 }
             }
         }
 
+        // --- batches: consecutive same-texture same-half draws share one -----
+        fn texture_of(it: &Item) -> Option<vieww_hal::vulkan::Texture3d<'_>> {
+            it.material
+                .map
+                .as_ref()
+                .map(|t| vieww_hal::vulkan::Texture3d {
+                    width: t.width,
+                    height: t.height,
+                    texels: t.texels(),
+                    nearest: t.filter == crate::scene::Filter::Nearest,
+                })
+        }
+        let same_texture = |a: Option<&vieww_hal::vulkan::Texture3d>,
+                            b: Option<&vieww_hal::vulkan::Texture3d>| {
+            match (a, b) {
+                (None, None) => true,
+                (Some(a), Some(b)) => {
+                    a.width == b.width
+                        && a.height == b.height
+                        && a.nearest == b.nearest
+                        && std::ptr::eq(a.texels.as_ptr(), b.texels.as_ptr())
+                }
+                _ => false,
+            }
+        };
+        let mut batches: Vec<vieww_hal::vulkan::Batch3d<'_>> = Vec::new();
+        for (it, half, first, count) in draws {
+            let (depth_write, blend, alpha_pass) = match half {
+                Half::Write => (true, false, 0.0),
+                Half::Blend => (false, true, 1.0),
+            };
+            let texture = texture_of(it);
+            let mergeable = matches!(batches.last_mut(), Some(b)
+                if b.depth_write == depth_write
+                    && b.blend == blend
+                    && b.first_index + b.index_count == first
+                    && same_texture(b.texture.as_ref(), texture.as_ref()));
+            if mergeable {
+                // The borrow checker cannot see through the `matches!`, so
+                // take the last again for the mutation.
+                let b = batches.last_mut().expect("mergeable");
+                b.index_count += count;
+            } else {
+                batches.push(vieww_hal::vulkan::Batch3d {
+                    first_index: first,
+                    index_count: count,
+                    depth_write,
+                    blend,
+                    alpha_pass,
+                    texture,
+                });
+            }
+        }
+
         let bg = [scene.background.r, scene.background.g, scene.background.b];
-        Some(gpu.render_lit3d_to_pixels(self.width, self.height, &vertices, &u, &depth, bg))
+        Some(gpu.render_lit3d_to_pixels(
+            self.width,
+            self.height,
+            &vertices,
+            &u,
+            &depth,
+            &batches,
+            bg,
+        ))
     }
 }
 
@@ -542,14 +659,86 @@ impl GpuRenderer {
 /// CPU for the frame.
 const MAX_LIGHTS: usize = 8;
 
+/// One light as the lit pass's 20-float `Light` record — `lit3d.wgsl`'s five
+/// vec4s in std140 order:
+///
+/// ```text
+/// [0..4)   color_kind       rgb = colour, w = kind: 0 ambient, 1 hemisphere,
+///                            2 directional, 3 point, 4 spot
+/// [4..8)   dir_intensity    xyz = travel direction (directional, spot),
+///                            w = intensity
+/// [8..12)  ground_shadow    rgb = ground (hemisphere), w = shadow flag
+/// [12..16) pos_range        xyz = world position (point, spot), w = range
+/// [16..20) cone             x = cos(outer angle), y = cos(inner angle)
+/// ```
+///
+/// The spot's outer/inner cosines are the CPU renderer's own `angle.cos()`
+/// and `(angle * (1.0 - penumbra)).cos()`, computed once here so both
+/// renderers evaluate the same numbers per fragment — the shader never
+/// re-derives them and cannot drift from the oracle.
+fn pack_light(l: &LightW) -> [f32; 20] {
+    let mut out = [0.0_f32; 20];
+    match l.light {
+        Light::Ambient { color, intensity } => {
+            out[0..4].copy_from_slice(&[color.r, color.g, color.b, 0.0]);
+            out[7] = intensity;
+        }
+        Light::Hemisphere {
+            sky,
+            ground,
+            intensity,
+        } => {
+            out[0..4].copy_from_slice(&[sky.r, sky.g, sky.b, 1.0]);
+            out[7] = intensity;
+            out[8..12].copy_from_slice(&[ground.r, ground.g, ground.b, 0.0]);
+        }
+        Light::Directional {
+            color,
+            intensity,
+            shadow,
+            ..
+        } => {
+            out[0..4].copy_from_slice(&[color.r, color.g, color.b, 2.0]);
+            out[4..8].copy_from_slice(&[l.direction.x, l.direction.y, l.direction.z, intensity]);
+            out[11] = if shadow { 1.0 } else { 0.0 };
+        }
+        Light::Point {
+            color,
+            intensity,
+            range,
+        } => {
+            out[0..4].copy_from_slice(&[color.r, color.g, color.b, 3.0]);
+            out[7] = intensity;
+            out[12..16].copy_from_slice(&[l.position.x, l.position.y, l.position.z, range]);
+        }
+        Light::Spot {
+            color,
+            intensity,
+            range,
+            angle,
+            penumbra,
+            ..
+        } => {
+            out[0..4].copy_from_slice(&[color.r, color.g, color.b, 4.0]);
+            out[4..8].copy_from_slice(&[l.direction.x, l.direction.y, l.direction.z, intensity]);
+            out[12..16].copy_from_slice(&[l.position.x, l.position.y, l.position.z, range]);
+            out[16] = angle.cos();
+            out[17] = (angle * (1.0 - penumbra)).cos();
+        }
+    }
+    out
+}
+
 /// Whether a material is inside the GPU passes' reach: `Basic` (the unlit
-/// pass, or the lit pass's unlit branch) or `Lambert`, untextured, opaque,
-/// filled, with no custom shader.
+/// pass, or the lit pass's unlit branch), `Lambert` or `Phong` — textured,
+/// translucent or neither, since the lit pass samples the oracle's own
+/// texels and draws the transparent split — but filled, with no custom
+/// shader.
 fn material_reachable(mat: &Material) -> bool {
-    matches!(mat.shading, Shading::Basic | Shading::Lambert)
-        && mat.map.is_none()
-        && mat.opacity >= 1.0
-        && !mat.wireframe
+    matches!(
+        mat.shading,
+        Shading::Basic | Shading::Lambert | Shading::Phong { .. }
+    ) && !mat.wireframe
         && mat.shader.is_none()
 }
 
@@ -581,6 +770,156 @@ mod tests {
 
         assert_eq!(image.width(), 64);
         assert_eq!(image.height(), 48);
+        assert_eq!(image.pixels(), cpu.pixels());
+    }
+
+    #[test]
+    fn phong_materials_are_reachable_textured_and_transparent_alike() {
+        assert!(material_reachable(&Material::phong(Color::RED, 32.0)));
+        // Textured and translucent joined the reach with the transparent
+        // split: the lit pass samples the oracle's own texels and draws
+        // both halves of the per-fragment alpha rule.
+        let mut textured = Material::phong(Color::RED, 32.0);
+        textured.map = Some(crate::scene::Texture::from_rgba8(
+            2,
+            2,
+            &[
+                255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255,
+            ],
+        ));
+        assert!(material_reachable(&textured));
+        let mut transparent = Material::phong(Color::RED, 32.0);
+        transparent.opacity = 0.5;
+        assert!(material_reachable(&transparent));
+        // The exclusions that remain: wireframe, a custom shader, and the
+        // shadings the passes do not implement.
+        assert!(!material_reachable(
+            &Material::lambert(Color::RED).wireframe()
+        ));
+        let mut shaded = Material::lambert(Color::RED);
+        shaded.shader = Some(crate::shader::FragmentShader::new("test", |_f| [0.0; 4]));
+        assert!(!material_reachable(&shaded));
+        assert!(!material_reachable(&Material {
+            shading: Shading::Standard {
+                metallic: 0.0,
+                roughness: 0.5,
+            },
+            ..Material::lambert(Color::RED)
+        }));
+    }
+
+    #[test]
+    fn point_and_spot_lights_pack_into_the_shader_record() {
+        // A point light: kind 3, position and range in `pos_range`, intensity
+        // in the dir/intensity vec4's w, nothing else set.
+        let point = LightW {
+            light: Light::Point {
+                color: crate::scene::Rgb::new(1.0, 0.5, 0.25),
+                intensity: 2.0,
+                range: 6.0,
+            },
+            position: Vec3::new(1.0, 2.0, 3.0),
+            direction: Vec3::ZERO,
+        };
+        let packed = pack_light(&point);
+        assert_eq!(packed[0..4], [1.0, 0.5, 0.25, 3.0]);
+        assert_eq!(packed[7], 2.0);
+        assert_eq!(packed[12..16], [1.0, 2.0, 3.0, 6.0]);
+        assert_eq!(packed[16..20], [0.0; 4], "no cone for a point light");
+
+        // A spot: kind 4, travel direction, and the CPU's own outer/inner
+        // cosines — the numbers the CPU oracle's cone math uses, precomputed
+        // so the shader cannot drift from them.
+        let spot = LightW {
+            light: Light::Spot {
+                color: crate::scene::Rgb::new(0.2, 0.8, 1.0),
+                intensity: 4.0,
+                range: 10.0,
+                direction: Vec3::new(0.0, -1.0, 0.0),
+                angle: 0.5,
+                penumbra: 0.25,
+            },
+            position: Vec3::new(0.0, 5.0, 0.0),
+            direction: Vec3::new(0.0, -1.0, 0.0),
+        };
+        let packed = pack_light(&spot);
+        assert_eq!(packed[0..4], [0.2, 0.8, 1.0, 4.0]);
+        assert_eq!(packed[4..8], [0.0, -1.0, 0.0, 4.0]);
+        assert_eq!(packed[12..16], [0.0, 5.0, 0.0, 10.0]);
+        assert!((packed[16] - 0.5_f32.cos()).abs() < 1e-6);
+        assert!((packed[17] - (0.5f32 * (1.0 - 0.25)).cos()).abs() < 1e-6);
+    }
+
+    #[test]
+    fn directional_and_ambient_lights_pack_as_they_always_did() {
+        // The Lambert pass's record, unchanged: the parity tests' contract.
+        let ambient = LightW {
+            light: Light::Ambient {
+                color: crate::scene::Rgb::new(0.1, 0.2, 0.3),
+                intensity: 0.7,
+            },
+            position: Vec3::ZERO,
+            direction: Vec3::ZERO,
+        };
+        let packed = pack_light(&ambient);
+        assert_eq!(packed[0..4], [0.1, 0.2, 0.3, 0.0]);
+        assert_eq!(packed[7], 0.7);
+        assert_eq!(packed[8..20], [0.0; 12]);
+
+        let mut directional = LightW {
+            light: Light::Directional {
+                color: crate::scene::Rgb::WHITE,
+                intensity: 1.2,
+                direction: Vec3::new(0.0, -1.0, -1.0),
+                shadow: true,
+            },
+            position: Vec3::ZERO,
+            direction: Vec3::new(0.0, -1.0, -1.0).normalize(),
+        };
+        let packed = pack_light(&directional);
+        assert_eq!(packed[3], 2.0);
+        assert_eq!(packed[7], 1.2);
+        assert_eq!(packed[11], 1.0);
+        // Travel direction, normalized by `world_lights` before packing.
+        directional.direction = Vec3::ZERO;
+        let packed = pack_light(&directional);
+        assert_eq!(packed[4..7], [0.0; 3]);
+    }
+
+    #[test]
+    fn a_phong_scene_without_gpu_falls_back_to_the_cpu_renderer_exactly() {
+        // On a machine without a device this is the fallback contract; on one
+        // with a device the hardware parity suite (`tests/gpu_lit.rs`) holds
+        // the same scene to the oracle's pixels.
+        let mut scene = Scene::new();
+        scene.background = crate::scene::Rgb::new(0.05, 0.05, 0.1);
+        scene.add(
+            Node::new(
+                "light",
+                Content::Light(Light::Point {
+                    color: crate::scene::Rgb::WHITE,
+                    intensity: 1.4,
+                    range: 12.0,
+                }),
+            )
+            .at(Vec3::new(2.0, 3.0, 2.0)),
+            None,
+        );
+        scene.add(
+            Node::new(
+                "sphere",
+                crate::scene::Content::mesh(
+                    crate::geometry::sphere(1.0, 24, 16),
+                    Material::phong(Color::rgb(200, 40, 40), 40.0),
+                ),
+            ),
+            None,
+        );
+        let camera = Camera::perspective(Vec3::new(0.0, 1.0, 4.0), Vec3::ZERO, 0.8);
+
+        let gpu = GpuRenderer::without_gpu(64, 48);
+        let (image, _) = gpu.render(&mut scene, &camera);
+        let (cpu, _) = Renderer::new(64, 48).render(&mut scene, &camera);
         assert_eq!(image.pixels(), cpu.pixels());
     }
 }

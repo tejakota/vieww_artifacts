@@ -50,9 +50,12 @@ vieww-hal = { workspace = true, features = ["vulkan-swapchain"] }
 # `vulkan-swapchain` feature with its executor.
 vieww-gpu.workspace = true
 # The hybrid placement planner, run in shadow beside `present_planned` when
-# `VIEWW_PLANNER_SHADOW` is set (`src/native.rs`). Pure CPU-side arithmetic,
-# like `vieww-gpu` above, and its dependencies are already in this graph.
-vieww-render-planner.workspace = true
+# `VIEWW_PLANNER_SHADOW` is set (`src/native.rs`), and calibrated against this
+# machine at startup when `VIEWW_PLANNER_CALIBRATE=1` (`probe::calibrate_cpu_fill`,
+# behind the planner's `calibrate` feature). That feature only turns on
+# `vieww-paint/native`, which this crate already requires below, so it adds no
+# new dependency to the graph — only the benchmark's use of it.
+vieww-render-planner = { workspace = true, features = ["calibrate"] }
 # The generic window-handle traits `vieww_hal::vulkan::VulkanDevice::for_window`
 # takes — `winit::window::Window` already implements them (winit 0.30 depends
 # on the same 0.6 generation), so this adds no new handle type, only the

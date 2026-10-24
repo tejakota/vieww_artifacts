@@ -150,6 +150,15 @@ impl Texture {
         Self::from_rgba8(size, size, &px)
     }
 
+    /// The linear-light texels the CPU renderer samples — `[y * width + x]`,
+    /// row-major, origin top row. The GPU lit pass uploads the same values
+    /// (as f16) so both renderers sample one texture, not two opinions of
+    /// one. Read-only: a texture's texels never change after construction.
+    #[must_use]
+    pub fn texels(&self) -> &[[f32; 4]] {
+        &self.texels
+    }
+
     fn texel(&self, x: i64, y: i64) -> [f32; 4] {
         let w = i64::from(self.width);
         let h = i64::from(self.height);
