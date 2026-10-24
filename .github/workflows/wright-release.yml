@@ -109,6 +109,10 @@ jobs:
       # no-layout-overflow gate.
       - name: Test (Linux)
         if: runner.os == 'Linux'
+        # The suite takes ~5 minutes; a hang should fail the job here, not
+        # after the job's 120. A stuck test is named in the log by libtest's
+        # "has been running for over 60 seconds" line.
+        timeout-minutes: 30
         run: |
           cargo clippy --workspace --all-targets --features wright/ui -- -D warnings
           cargo test --workspace --features wright/ui
