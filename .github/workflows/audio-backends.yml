@@ -182,11 +182,13 @@ jobs:
         env:
           VIEWW_REQUIRE_LOOPBACK: "1"
           VIEWW_LOOP_BACKEND: wasapi
+          VIEWW_LOOP_ATTEMPTS: "3"
         run: cargo test --release -p vieww-audio --test device_loopback default_device -- --ignored --nocapture
       - name: Loopback, exclusive mode
         env:
           VIEWW_REQUIRE_LOOPBACK: "1"
           VIEWW_LOOP_BACKEND: wasapi-exclusive
+          VIEWW_LOOP_ATTEMPTS: "3"
           VIEWW_AUDIO_DEBUG: "1"
         run: cargo test --release -p vieww-audio --test device_loopback default_device -- --ignored --nocapture
       - name: MIDI ports list (WinMM)
@@ -222,6 +224,7 @@ jobs:
         env:
           VIEWW_REQUIRE_LOOPBACK: "1"
           VIEWW_LOOP_BACKEND: coreaudio
+          VIEWW_LOOP_ATTEMPTS: "3"
         run: cargo test --release -p vieww-audio --test device_loopback default_device -- --ignored --nocapture
       - name: CoreMIDI virtual endpoints round trip
         run: cargo test --release -p vieww-audio --test device_loopback coremidi -- --ignored --nocapture
